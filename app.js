@@ -2,914 +2,120 @@
   'use strict';
 
   const SVG_NS = 'http://www.w3.org/2000/svg';
-  const ARENA = {
-    x: 52,
-    y: 52,
-    width: 896,
-    height: 456,
-    lengthFt: 200,
-    widthFt: 100,
-  };
-  const STORAGE_KEY = 'rodeo-drill-designer-v1';
-  const ROUTE_COLORS = ['#f0b84e', '#60a5fa', '#ef6f6c', '#65c18c', '#b78cff', '#f28cc5', '#50c8c6', '#f39c5a'];
+  const ARENA = { x: 52, y: 52, width: 896, height: 456, lengthFt: 200, widthFt: 100 };
+  const PX_PER_FT = (ARENA.width / ARENA.lengthFt + ARENA.height / ARENA.widthFt) / 2;
+  const STORAGE_KEY = 'rodeo-drill-designer-v2';
+  const ROUTE_COLORS = ['#f0b84e','#60a5fa','#ef6f6c','#65c18c','#b78cff','#f28cc5','#50c8c6','#f39c5a'];
+  const SAFE_CROSSING_GAP_SEC = 0.38;
+  const MAX_AUTO_DELAY_SEC = 18;
+  const AUTO_DELAY_STEP_SEC = 0.05;
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    drillName: $('drillName'),
-    addLineBtn: $('addLineBtn'),
-    addLineEmptyBtn: $('addLineEmptyBtn'),
-    lineList: $('lineList'),
-    noSelection: $('noSelection'),
-    lineEditor: $('lineEditor'),
-    editorTitle: $('editorTitle'),
-    lineName: $('lineName'),
-    lineColor: $('lineColor'),
-    horseCount: $('horseCount'),
-    startDelay: $('startDelay'),
-    lineSpeed: $('lineSpeed'),
-    horseSpacing: $('horseSpacing'),
-    drawSegmentBtn: $('drawSegmentBtn'),
-    holdSeconds: $('holdSeconds'),
-    addHoldBtn: $('addHoldBtn'),
-    sequenceList: $('sequenceList'),
-    stepCount: $('stepCount'),
-    deleteLineBtn: $('deleteLineBtn'),
-    clearLineBtn: $('clearLineBtn'),
-    undoBtn: $('undoBtn'),
-    routeLayer: $('routeLayer'),
-    draftLayer: $('draftLayer'),
-    horseLayer: $('horseLayer'),
-    arena: $('arena'),
-    interactionSurface: $('interactionSurface'),
-    drawHint: $('drawHint'),
-    emptyArena: $('emptyArena'),
-    playBtn: $('playBtn'),
-    restartBtn: $('restartBtn'),
-    timeline: $('timeline'),
-    timeLabel: $('timeLabel'),
-    durationLabel: $('durationLabel'),
-    playbackRate: $('playbackRate'),
-    distanceStat: $('distanceStat'),
-    lineTimeStat: $('lineTimeStat'),
-    holdsStat: $('holdsStat'),
-    teamStat: $('teamStat'),
-    saveBtn: $('saveBtn'),
-    exampleBtn: $('exampleBtn'),
-    exportBtn: $('exportBtn'),
-    importBtn: $('importBtn'),
-    importInput: $('importInput'),
-    presentationBtn: $('presentationBtn'),
-    fitBtn: $('fitBtn'),
-    toast: $('toast'),
+    drillName:$('drillName'),addLineBtn:$('addLineBtn'),addLineEmptyBtn:$('addLineEmptyBtn'),lineList:$('lineList'),noSelection:$('noSelection'),lineEditor:$('lineEditor'),editorTitle:$('editorTitle'),lineName:$('lineName'),lineColor:$('lineColor'),horseCount:$('horseCount'),startDelay:$('startDelay'),lineSpeed:$('lineSpeed'),horseSpacing:$('horseSpacing'),formation:$('formation'),lateralGap:$('lateralGap'),smartStraighten:$('smartStraighten'),straightenStrength:$('straightenStrength'),straightenLastBtn:$('straightenLastBtn'),drawSegmentBtn:$('drawSegmentBtn'),holdSeconds:$('holdSeconds'),addHoldBtn:$('addHoldBtn'),sequenceList:$('sequenceList'),stepCount:$('stepCount'),deleteLineBtn:$('deleteLineBtn'),clearLineBtn:$('clearLineBtn'),undoBtn:$('undoBtn'),routeLayer:$('routeLayer'),safetyLayer:$('safetyLayer'),draftLayer:$('draftLayer'),horseLayer:$('horseLayer'),arena:$('arena'),interactionSurface:$('interactionSurface'),drawHint:$('drawHint'),emptyArena:$('emptyArena'),playBtn:$('playBtn'),restartBtn:$('restartBtn'),timeline:$('timeline'),timeLabel:$('timeLabel'),durationLabel:$('durationLabel'),playbackRate:$('playbackRate'),distanceStat:$('distanceStat'),lineTimeStat:$('lineTimeStat'),weaveStat:$('weaveStat'),teamStat:$('teamStat'),saveBtn:$('saveBtn'),exampleBtn:$('exampleBtn'),exportBtn:$('exportBtn'),importBtn:$('importBtn'),importInput:$('importInput'),presentationBtn:$('presentationBtn'),generatorBtn:$('generatorBtn'),generatorSideBtn:$('generatorSideBtn'),safetyBtn:$('safetyBtn'),safetyStrip:$('safetyStrip'),safetyTitle:$('safetyTitle'),safetyDetail:$('safetyDetail'),toast:$('toast')
   };
 
   const state = {
-    drill: makeEmptyDrill(),
-    selectedLineId: null,
-    drawMode: false,
-    drawing: false,
-    draftPoints: [],
-    isPlaying: false,
-    currentTime: 0,
-    playbackRate: 1,
-    lastFrame: 0,
-    raf: 0,
-    dirty: false,
-    toastTimer: 0,
+    drill: makeEmptyDrill(), selectedLineId:null, drawMode:false, drawing:false, draftPoints:[], isPlaying:false,
+    currentTime:0, playbackRate:1, lastFrame:0, raf:0, dirty:false, toastTimer:0,
+    safetyPlan:{ crossings:[], delays:new Map(), unresolved:[], totalAutoDelay:0 }
   };
 
-  function uid(prefix = 'id') {
-    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  }
-
-  function makeEmptyDrill() {
-    return {
-      version: 1,
-      id: uid('drill'),
-      name: 'San Antonio Grand Entry',
-      venue: 'Frost Bank Center / AT&T Center, San Antonio, Texas',
-      arena: { lengthFt: ARENA.lengthFt, widthFt: ARENA.widthFt },
-      lines: [],
-      updatedAt: new Date().toISOString(),
-    };
-  }
-
-  function makeLine() {
-    const index = state.drill.lines.length;
-    return {
-      id: uid('line'),
-      name: `Line ${index + 1}`,
-      color: ROUTE_COLORS[index % ROUTE_COLORS.length],
-      horseCount: 4,
-      speedMph: 10,
-      spacingFt: 12,
-      startDelay: 0,
-      segments: [],
-    };
-  }
-
-  function selectedLine() {
-    return state.drill.lines.find((line) => line.id === state.selectedLineId) || null;
-  }
-
-  function clamp(value, min, max) {
-    return Math.min(max, Math.max(min, value));
-  }
-
-  function distPx(a, b) {
-    return Math.hypot(b.x - a.x, b.y - a.y);
-  }
-
-  function distFt(a, b) {
-    const dxFt = ((b.x - a.x) / ARENA.width) * state.drill.arena.lengthFt;
-    const dyFt = ((b.y - a.y) / ARENA.height) * state.drill.arena.widthFt;
-    return Math.hypot(dxFt, dyFt);
-  }
-
-  function pointsDistanceFt(points) {
-    let total = 0;
-    for (let i = 1; i < points.length; i += 1) total += distFt(points[i - 1], points[i]);
-    return total;
-  }
-
-  function mphToFps(mph) {
-    return Math.max(0.1, Number(mph) || 0) * 1.4666667;
-  }
-
-  function holdTotal(line) {
-    return line.segments.reduce((sum, segment) => sum + (segment.type === 'hold' ? Number(segment.duration) || 0 : 0), 0);
-  }
-
-  function getLastMoveEnd(line) {
-    for (let i = line.segments.length - 1; i >= 0; i -= 1) {
-      const segment = line.segments[i];
-      if (segment.type === 'move' && segment.points.length) return segment.points[segment.points.length - 1];
-    }
-    return null;
-  }
-
-  function compileLine(line) {
-    const speedFps = mphToFps(line.speedMph);
-    const events = [];
-    let cumulativeDistance = 0;
-    let elapsed = Math.max(0, Number(line.startDelay) || 0);
-
-    for (const segment of line.segments) {
-      if (segment.type === 'move') {
-        const distance = pointsDistanceFt(segment.points);
-        const duration = distance / speedFps;
-        events.push({ type: 'move', startTime: elapsed, endTime: elapsed + duration, startDistance: cumulativeDistance, endDistance: cumulativeDistance + distance, duration, distance });
-        cumulativeDistance += distance;
-        elapsed += duration;
-      } else if (segment.type === 'hold') {
-        const duration = Math.max(0, Number(segment.duration) || 0);
-        events.push({ type: 'hold', startTime: elapsed, endTime: elapsed + duration, distance: cumulativeDistance, duration });
-        elapsed += duration;
-      }
-    }
-
-    const tailDistance = Math.max(0, (Math.max(1, line.horseCount) - 1) * Math.max(0, line.spacingFt));
-    const tailDuration = cumulativeDistance > 0 ? tailDistance / speedFps : 0;
-    return {
-      events,
-      speedFps,
-      totalDistance: cumulativeDistance,
-      choreographyEnd: elapsed,
-      tailDuration,
-      totalTime: cumulativeDistance > 0 ? elapsed + tailDuration : 0,
-    };
-  }
-
-  function drillDuration() {
-    return state.drill.lines.reduce((max, line) => Math.max(max, compileLine(line).totalTime), 0);
-  }
-
-  function leadDistanceAtTime(line, time) {
-    const compiled = compileLine(line);
-    if (!compiled.totalDistance) return { distance: 0, active: false, compiled };
-    const delay = Math.max(0, Number(line.startDelay) || 0);
-    if (time < delay) return { distance: 0, active: true, compiled };
-
-    for (const event of compiled.events) {
-      if (time < event.startTime) break;
-      if (time <= event.endTime) {
-        if (event.type === 'hold') return { distance: event.distance, active: true, compiled };
-        const progress = event.duration ? clamp((time - event.startTime) / event.duration, 0, 1) : 1;
-        return { distance: event.startDistance + event.distance * progress, active: true, compiled };
-      }
-    }
-
-    const after = Math.max(0, time - compiled.choreographyEnd);
-    return { distance: compiled.totalDistance + after * compiled.speedFps, active: time <= compiled.totalTime, compiled };
-  }
-
-  function routePoints(line) {
-    const points = [];
-    for (const segment of line.segments) {
-      if (segment.type !== 'move' || !segment.points.length) continue;
-      for (const point of segment.points) {
-        if (!points.length || distPx(points[points.length - 1], point) > 0.01) points.push(point);
-      }
-    }
-    return points;
-  }
-
-  function pointAtDistance(line, targetFt) {
-    const points = routePoints(line);
-    if (!points.length) return null;
-    if (points.length === 1) return { ...points[0], angle: 0 };
-    if (targetFt <= 0) {
-      const next = points[1];
-      return { ...points[0], angle: Math.atan2(next.y - points[0].y, next.x - points[0].x) * 180 / Math.PI };
-    }
-
-    let walked = 0;
-    for (let i = 1; i < points.length; i += 1) {
-      const a = points[i - 1];
-      const b = points[i];
-      const segmentFt = distFt(a, b);
-      if (walked + segmentFt >= targetFt) {
-        const t = segmentFt ? (targetFt - walked) / segmentFt : 0;
-        return {
-          x: a.x + (b.x - a.x) * t,
-          y: a.y + (b.y - a.y) * t,
-          angle: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI,
-        };
-      }
-      walked += segmentFt;
-    }
-
-    const a = points[points.length - 2];
-    const b = points[points.length - 1];
-    return { ...b, angle: Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI };
-  }
-
-  function formatTime(seconds, tenths = false) {
-    const value = Math.max(0, Number(seconds) || 0);
-    const minutes = Math.floor(value / 60);
-    const secs = value - minutes * 60;
-    return tenths ? `${minutes}:${secs.toFixed(1).padStart(4, '0')}` : `${minutes}:${Math.floor(secs).toString().padStart(2, '0')}`;
-  }
-
-  function svgEl(tag, attrs = {}) {
-    const el = document.createElementNS(SVG_NS, tag);
-    for (const [key, value] of Object.entries(attrs)) {
-      if (value !== undefined && value !== null) el.setAttribute(key, String(value));
-    }
-    return el;
-  }
-
-  function pathD(points) {
-    if (!points.length) return '';
-    if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
-    if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-    let d = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length - 1; i += 1) {
-      const midX = (points[i].x + points[i + 1].x) / 2;
-      const midY = (points[i].y + points[i + 1].y) / 2;
-      d += ` Q ${points[i].x} ${points[i].y} ${midX} ${midY}`;
-    }
-    const last = points[points.length - 1];
-    d += ` L ${last.x} ${last.y}`;
-    return d;
-  }
-
-  function renderAll() {
-    renderLineList();
-    renderEditor();
-    renderRoutes();
-    renderPlayback();
-    updateEmptyState();
-  }
-
-  function renderLineList() {
-    els.lineList.replaceChildren();
-    for (const line of state.drill.lines) {
-      const card = document.createElement('button');
-      card.className = `line-card${line.id === state.selectedLineId ? ' selected' : ''}`;
-      card.type = 'button';
-      card.innerHTML = `
-        <span class="line-swatch" style="background:${escapeHtml(line.color)}"></span>
-        <span>
-          <span class="line-card-name">${escapeHtml(line.name)}</span>
-          <span class="line-card-meta">${line.horseCount} horse${line.horseCount === 1 ? '' : 's'} · ${line.segments.length} step${line.segments.length === 1 ? '' : 's'}</span>
-        </span>
-        <span class="line-card-badge">${line.horseCount}</span>`;
-      card.addEventListener('click', () => selectLine(line.id));
-      els.lineList.appendChild(card);
-    }
-  }
-
-  function renderEditor() {
-    const line = selectedLine();
-    els.noSelection.classList.toggle('hidden', !!line);
-    els.lineEditor.classList.toggle('hidden', !line);
-    els.clearLineBtn.disabled = !line || !line.segments.length;
-    els.undoBtn.disabled = !line || !line.segments.length;
-    if (!line) return;
-
-    els.editorTitle.textContent = line.name;
-    setInputValue(els.lineName, line.name);
-    setInputValue(els.lineColor, line.color);
-    setInputValue(els.horseCount, line.horseCount);
-    setInputValue(els.startDelay, line.startDelay);
-    setInputValue(els.lineSpeed, line.speedMph);
-    setInputValue(els.horseSpacing, line.spacingFt);
-
-    const hasMove = line.segments.some((segment) => segment.type === 'move');
-    const last = line.segments[line.segments.length - 1];
-    els.addHoldBtn.disabled = !hasMove || !last || last.type === 'hold';
-    els.drawSegmentBtn.textContent = hasMove ? 'Draw next movement' : 'Draw first movement';
-    els.drawSegmentBtn.classList.toggle('active', state.drawMode);
-
-    els.sequenceList.replaceChildren();
-    line.segments.forEach((segment, index) => {
-      const item = document.createElement('div');
-      item.className = 'sequence-item';
-      const isMove = segment.type === 'move';
-      const detail = isMove
-        ? `${Math.round(pointsDistanceFt(segment.points))} ft movement`
-        : `${Number(segment.duration).toFixed(Number(segment.duration) % 1 ? 1 : 0)} sec hold`;
-      item.innerHTML = `
-        <span class="sequence-number">${index + 1}</span>
-        <span class="sequence-main"><strong>${isMove ? 'Movement' : 'Stop / hold'}</strong><span>${detail}</span></span>
-        <button class="sequence-remove" type="button" aria-label="Remove step ${index + 1}">×</button>`;
-      item.querySelector('button').addEventListener('click', () => removeSegment(index));
-      els.sequenceList.appendChild(item);
-    });
-
-    els.stepCount.textContent = `${line.segments.length} step${line.segments.length === 1 ? '' : 's'}`;
-    const compiled = compileLine(line);
-    els.distanceStat.textContent = `${Math.round(compiled.totalDistance)} ft`;
-    els.lineTimeStat.textContent = formatTime(compiled.totalTime);
-    els.holdsStat.textContent = `${holdTotal(line).toFixed(holdTotal(line) % 1 ? 1 : 0)} sec`;
-    els.teamStat.textContent = `${teamHorseCount()} horses`;
-  }
-
-  function renderRoutes() {
-    els.routeLayer.replaceChildren();
-    for (const line of state.drill.lines) renderLineRoute(line);
-    renderDraft();
-    renderHorses();
-  }
-
-  function renderLineRoute(line) {
-    const isSelected = line.id === state.selectedLineId;
-    let firstPoint = null;
-    let lastPoint = null;
-    let lastMovementEnd = null;
-    let movementIndex = 0;
-
-    for (const segment of line.segments) {
-      if (segment.type === 'move' && segment.points.length >= 2) {
-        movementIndex += 1;
-        const d = pathD(segment.points);
-        els.routeLayer.appendChild(svgEl('path', { d, class: 'route-path-shadow' }));
-        els.routeLayer.appendChild(svgEl('path', {
-          d,
-          class: `route-path${isSelected ? '' : ' unselected'}`,
-          stroke: line.color,
-        }));
-
-        const mid = segment.points[Math.floor(segment.points.length / 2)];
-        const labelBg = svgEl('circle', { cx: mid.x, cy: mid.y, r: 10, fill: '#17140f', opacity: isSelected ? '.85' : '.55' });
-        const label = svgEl('text', { x: mid.x, y: mid.y + 0.3, class: 'segment-index' });
-        label.textContent = movementIndex;
-        els.routeLayer.append(labelBg, label);
-
-        if (!firstPoint) firstPoint = segment.points[0];
-        lastPoint = segment.points[segment.points.length - 1];
-        lastMovementEnd = lastPoint;
-      } else if (segment.type === 'hold' && lastMovementEnd) {
-        const ring = svgEl('circle', {
-          cx: lastMovementEnd.x,
-          cy: lastMovementEnd.y,
-          r: 16,
-          class: 'stop-marker-ring',
-          stroke: line.color,
-        });
-        const text = svgEl('text', { x: lastMovementEnd.x, y: lastMovementEnd.y + 0.5, class: 'stop-marker-text' });
-        text.textContent = `${segment.duration}s`;
-        els.routeLayer.append(ring, text);
-      }
-    }
-
-    if (firstPoint) {
-      els.routeLayer.appendChild(svgEl('circle', { cx: firstPoint.x, cy: firstPoint.y, r: 7, fill: line.color, class: 'route-start' }));
-    }
-    if (lastPoint) {
-      els.routeLayer.appendChild(svgEl('circle', { cx: lastPoint.x, cy: lastPoint.y, r: 6, class: 'route-end', stroke: line.color }));
-    }
-  }
-
-  function renderDraft() {
-    els.draftLayer.replaceChildren();
-    if (state.draftPoints.length > 1) {
-      els.draftLayer.appendChild(svgEl('path', { d: pathD(state.draftPoints), class: 'draft-path' }));
-    }
-  }
-
-  function renderHorses() {
-    els.horseLayer.replaceChildren();
-    const time = state.currentTime;
-    for (const line of state.drill.lines) {
-      const lead = leadDistanceAtTime(line, time);
-      if (!lead.compiled.totalDistance) continue;
-      for (let i = 0; i < line.horseCount; i += 1) {
-        const horseDistance = lead.distance - i * line.spacingFt;
-        if (horseDistance < -0.01 || horseDistance > lead.compiled.totalDistance + 0.01) continue;
-        const point = pointAtDistance(line, clamp(horseDistance, 0, lead.compiled.totalDistance));
-        if (!point) continue;
-        els.horseLayer.appendChild(makeHorseMarker(point, line, i + 1));
-      }
-    }
-  }
-
-  function makeHorseMarker(point, line, number) {
-    const g = svgEl('g', {
-      class: 'horse-marker',
-      transform: `translate(${point.x} ${point.y}) rotate(${point.angle + 90})`,
-    });
-    const body = svgEl('ellipse', { cx: 0, cy: 0, rx: 8.5, ry: 12.5, fill: line.color, class: 'horse-body' });
-    const head = svgEl('circle', { cx: 0, cy: -13, r: 4.3, class: 'horse-head' });
-    const direction = svgEl('path', { d: 'M -3 -20 L 0 -25 L 3 -20 Z', class: 'horse-direction' });
-    const numberText = svgEl('text', { x: 0, y: 0.5, class: 'horse-number', transform: 'rotate(0)' });
-    numberText.textContent = number;
-    g.append(body, head, direction, numberText);
-    return g;
-  }
-
-  function renderPlayback() {
-    const duration = drillDuration();
-    state.currentTime = clamp(state.currentTime, 0, duration || 0);
-    els.timeline.max = String(Math.max(0.01, duration));
-    els.timeline.value = String(state.currentTime);
-    els.timeLabel.textContent = formatTime(state.currentTime, true);
-    els.durationLabel.textContent = formatTime(duration, true);
-    els.playBtn.textContent = state.isPlaying ? '❚❚' : '▶';
-    els.playBtn.setAttribute('aria-label', state.isPlaying ? 'Pause drill' : 'Play drill');
-  }
-
-  function updateEmptyState() {
-    const hasMovement = state.drill.lines.some((line) => line.segments.some((segment) => segment.type === 'move'));
-    els.emptyArena.classList.toggle('hidden', hasMovement || state.drawMode);
-    els.drawHint.classList.toggle('hidden', !state.drawMode);
-  }
-
-  function selectLine(id) {
-    stopDrawing();
-    state.selectedLineId = id;
-    renderAll();
-  }
-
-  function addLine() {
-    pause();
-    const line = makeLine();
-    state.drill.lines.push(line);
-    state.selectedLineId = line.id;
-    markDirty();
-    renderAll();
-    requestAnimationFrame(() => els.lineName.focus());
-  }
-
-  function deleteSelectedLine() {
-    const line = selectedLine();
-    if (!line) return;
-    const index = state.drill.lines.findIndex((item) => item.id === line.id);
-    state.drill.lines.splice(index, 1);
-    state.selectedLineId = state.drill.lines[Math.min(index, state.drill.lines.length - 1)]?.id || null;
-    state.currentTime = 0;
-    markDirty();
-    renderAll();
-    toast('Line deleted');
-  }
-
-  function clearSelectedLine() {
-    const line = selectedLine();
-    if (!line || !line.segments.length) return;
-    line.segments = [];
-    state.currentTime = 0;
-    markDirty();
-    renderAll();
-    toast('Selected route cleared');
-  }
-
-  function removeSegment(index) {
-    const line = selectedLine();
-    if (!line) return;
-    line.segments.splice(index, 1);
-    normalizeSegmentStarts(line);
-    state.currentTime = 0;
-    markDirty();
-    renderAll();
-  }
-
-  function undoLastStep() {
-    const line = selectedLine();
-    if (!line || !line.segments.length) return;
-    line.segments.pop();
-    state.currentTime = 0;
-    markDirty();
-    renderAll();
-    toast('Last step removed');
-  }
-
-  function normalizeSegmentStarts(line) {
-    let end = null;
-    for (const segment of line.segments) {
-      if (segment.type === 'move' && segment.points.length) {
-        if (end) segment.points[0] = { ...end };
-        end = segment.points[segment.points.length - 1];
-      }
-    }
-  }
-
-  function beginDrawMode() {
-    const line = selectedLine();
-    if (!line) {
-      addLine();
-      return;
-    }
-    pause();
-    state.drawMode = !state.drawMode;
-    state.drawing = false;
-    state.draftPoints = [];
-    els.interactionSurface.style.cursor = state.drawMode ? 'crosshair' : '';
-    renderEditor();
-    renderDraft();
-    updateEmptyState();
-  }
-
-  function stopDrawing() {
-    state.drawMode = false;
-    state.drawing = false;
-    state.draftPoints = [];
-    els.interactionSurface.style.cursor = '';
-    renderDraft();
-    updateEmptyState();
-  }
-
-  function pointerToArena(event) {
-    const point = els.arena.createSVGPoint();
-    point.x = event.clientX;
-    point.y = event.clientY;
-    const matrix = els.arena.getScreenCTM();
-    if (!matrix) return null;
-    const svgPoint = point.matrixTransform(matrix.inverse());
-    return {
-      x: clamp(svgPoint.x, ARENA.x, ARENA.x + ARENA.width),
-      y: clamp(svgPoint.y, ARENA.y, ARENA.y + ARENA.height),
-    };
-  }
-
-  function onPointerDown(event) {
-    if (!state.drawMode || !selectedLine()) return;
-    event.preventDefault();
-    els.interactionSurface.setPointerCapture?.(event.pointerId);
-    state.drawing = true;
-    const point = pointerToArena(event);
-    if (!point) return;
-    const lastEnd = getLastMoveEnd(selectedLine());
-    state.draftPoints = lastEnd ? [{ ...lastEnd }] : [];
-    if (!lastEnd || distPx(lastEnd, point) > 2) state.draftPoints.push(point);
-    renderDraft();
-  }
-
-  function onPointerMove(event) {
-    if (!state.drawMode || !state.drawing) return;
-    event.preventDefault();
-    const point = pointerToArena(event);
-    if (!point) return;
-    const last = state.draftPoints[state.draftPoints.length - 1];
-    if (!last || distPx(last, point) >= 4) {
-      state.draftPoints.push(point);
-      renderDraft();
-    }
-  }
-
-  function onPointerUp(event) {
-    if (!state.drawMode || !state.drawing) return;
-    event.preventDefault();
-    state.drawing = false;
-    const line = selectedLine();
-    if (!line) return stopDrawing();
-    const simplified = simplifyPoints(state.draftPoints, 3);
-    if (simplified.length >= 2 && pointsDistanceFt(simplified) >= 3) {
-      line.segments.push({ type: 'move', id: uid('move'), points: simplified });
-      state.currentTime = 0;
-      markDirty();
-      toast('Movement added. Add a stop or draw the next movement.');
-    } else {
-      toast('Draw a longer movement path');
-    }
-    stopDrawing();
-    renderAll();
-  }
-
-  function simplifyPoints(points, minPx) {
-    if (points.length <= 2) return points.map((point) => ({ ...point }));
-    const result = [{ ...points[0] }];
-    for (let i = 1; i < points.length - 1; i += 1) {
-      if (distPx(result[result.length - 1], points[i]) >= minPx) result.push({ ...points[i] });
-    }
-    const last = points[points.length - 1];
-    if (distPx(result[result.length - 1], last) > 0.5) result.push({ ...last });
-    return result;
-  }
-
-  function addHold() {
-    const line = selectedLine();
-    if (!line) return;
-    const last = line.segments[line.segments.length - 1];
-    if (!last || last.type !== 'move') return;
-    const duration = clamp(Number(els.holdSeconds.value) || 10, 0.5, 300);
-    line.segments.push({ type: 'hold', id: uid('hold'), duration });
-    state.currentTime = 0;
-    markDirty();
-    renderAll();
-    toast(`${duration}-second stop added`);
-  }
-
-  function playPause() {
-    const duration = drillDuration();
-    if (!duration) {
-      toast('Draw at least one movement before playing');
-      return;
-    }
-    if (state.isPlaying) return pause();
-    if (state.currentTime >= duration - 0.01) state.currentTime = 0;
-    state.isPlaying = true;
-    state.lastFrame = performance.now();
-    renderPlayback();
-    state.raf = requestAnimationFrame(tick);
-  }
-
-  function pause() {
-    state.isPlaying = false;
-    if (state.raf) cancelAnimationFrame(state.raf);
-    state.raf = 0;
-    renderPlayback();
-  }
-
-  function tick(now) {
-    if (!state.isPlaying) return;
-    const delta = Math.min(0.08, (now - state.lastFrame) / 1000);
-    state.lastFrame = now;
-    state.currentTime += delta * state.playbackRate;
-    const duration = drillDuration();
-    if (state.currentTime >= duration) {
-      state.currentTime = duration;
-      state.isPlaying = false;
-    }
-    renderHorses();
-    renderPlayback();
-    if (state.isPlaying) state.raf = requestAnimationFrame(tick);
-  }
-
-  function restart() {
-    pause();
-    state.currentTime = 0;
-    renderHorses();
-    renderPlayback();
-  }
-
-  function updateLineField(field, value) {
-    const line = selectedLine();
-    if (!line) return;
-    line[field] = value;
-    markDirty();
-    state.currentTime = Math.min(state.currentTime, drillDuration());
-    renderLineList();
-    renderRoutes();
-    renderPlayback();
-    renderEditor();
-  }
-
-  function teamHorseCount() {
-    return state.drill.lines.reduce((sum, line) => sum + Math.max(0, Number(line.horseCount) || 0), 0);
-  }
-
-  function markDirty() {
-    state.dirty = true;
-    state.drill.updatedAt = new Date().toISOString();
-    els.saveBtn.textContent = 'Save';
-  }
-
-  function saveDrill(showToast = true) {
-    try {
-      state.drill.name = els.drillName.value.trim() || 'Untitled Drill';
-      state.drill.updatedAt = new Date().toISOString();
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.drill));
-      state.dirty = false;
-      els.saveBtn.textContent = 'Saved';
-      if (showToast) toast('Drill saved on this device');
-      setTimeout(() => { if (!state.dirty) els.saveBtn.textContent = 'Save'; }, 1200);
-    } catch (error) {
-      console.error(error);
-      toast('Could not save this drill');
-    }
-  }
-
-  function loadSaved() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) return false;
-      const parsed = JSON.parse(raw);
-      if (!validateDrill(parsed)) return false;
-      state.drill = parsed;
-      state.selectedLineId = parsed.lines[0]?.id || null;
-      els.drillName.value = parsed.name || 'San Antonio Grand Entry';
-      return true;
-    } catch (error) {
-      console.warn('Saved drill could not be loaded', error);
-      return false;
-    }
-  }
-
-  function validateDrill(drill) {
-    return !!drill && typeof drill === 'object' && Array.isArray(drill.lines) && drill.lines.every((line) => line && Array.isArray(line.segments));
-  }
-
-  function exportDrill() {
-    saveDrill(false);
-    const data = JSON.stringify(state.drill, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = `${slugify(state.drill.name || 'rodeo-drill')}.json`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-    toast('Drill exported');
-  }
-
-  function importDrill(file) {
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result));
-        if (!validateDrill(parsed)) throw new Error('Invalid drill file');
-        pause();
-        state.drill = parsed;
-        state.selectedLineId = parsed.lines[0]?.id || null;
-        state.currentTime = 0;
-        els.drillName.value = parsed.name || 'Imported Drill';
-        markDirty();
-        renderAll();
-        saveDrill(false);
-        toast('Drill imported');
-      } catch (error) {
-        console.error(error);
-        toast('That file is not a valid Rodeo drill');
-      }
-      els.importInput.value = '';
-    };
-    reader.readAsText(file);
-  }
-
-  function loadExample() {
-    pause();
-    const lineA = {
-      id: uid('line'), name: 'Silver A', color: '#f0b84e', horseCount: 4, speedMph: 11, spacingFt: 12, startDelay: 0,
-      segments: [
-        { type: 'move', id: uid('move'), points: sampleCurve([[55,280],[140,280],[270,170],[455,120],[500,150],[500,280]]) },
-        { type: 'hold', id: uid('hold'), duration: 10 },
-        { type: 'move', id: uid('move'), points: sampleCurve([[500,280],[620,350],[790,410],[944,280]]) },
-      ],
-    };
-    const lineB = {
-      id: uid('line'), name: 'Silver B', color: '#60a5fa', horseCount: 4, speedMph: 11, spacingFt: 12, startDelay: 0,
-      segments: [
-        { type: 'move', id: uid('move'), points: sampleCurve([[945,280],[860,280],[730,170],[545,120],[500,150],[500,280]]) },
-        { type: 'hold', id: uid('hold'), duration: 10 },
-        { type: 'move', id: uid('move'), points: sampleCurve([[500,280],[380,350],[210,410],[56,280]]) },
-      ],
-    };
-    state.drill = makeEmptyDrill();
-    state.drill.name = 'Two-Line Grand Entry Example';
-    state.drill.lines = [lineA, lineB];
-    state.selectedLineId = lineA.id;
-    state.currentTime = 0;
-    els.drillName.value = state.drill.name;
-    markDirty();
-    renderAll();
-    toast('Example loaded — press Play');
-  }
-
-  function sampleCurve(anchors) {
-    const points = [];
-    for (let i = 1; i < anchors.length; i += 1) {
-      const [x1, y1] = anchors[i - 1];
-      const [x2, y2] = anchors[i];
-      const steps = Math.max(2, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / 18));
-      for (let s = i === 1 ? 0 : 1; s <= steps; s += 1) {
-        const t = s / steps;
-        points.push({ x: x1 + (x2 - x1) * t, y: y1 + (y2 - y1) * t });
-      }
-    }
-    return points;
-  }
-
-  function slugify(value) {
-    return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'rodeo-drill';
-  }
-
-  function escapeHtml(value) {
-    return String(value).replace(/[&<>'\"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '\"': '&quot;' }[char]));
-  }
-
-  function setInputValue(input, value) {
-    if (document.activeElement !== input) input.value = String(value ?? '');
-  }
-
-  function toast(message) {
-    clearTimeout(state.toastTimer);
-    els.toast.textContent = message;
-    els.toast.classList.add('show');
-    state.toastTimer = setTimeout(() => els.toast.classList.remove('show'), 2200);
-  }
-
-  function togglePresentation() {
-    document.body.classList.toggle('presentation');
-    const active = document.body.classList.contains('presentation');
-    els.presentationBtn.textContent = active ? 'Exit Team View' : 'Team View';
-    if (active) toast('Team View — press Esc to exit');
-  }
-
-  function bindEvents() {
-    els.addLineBtn.addEventListener('click', addLine);
-    els.addLineEmptyBtn.addEventListener('click', addLine);
-    els.deleteLineBtn.addEventListener('click', deleteSelectedLine);
-    els.clearLineBtn.addEventListener('click', clearSelectedLine);
-    els.undoBtn.addEventListener('click', undoLastStep);
-    els.drawSegmentBtn.addEventListener('click', beginDrawMode);
-    els.addHoldBtn.addEventListener('click', addHold);
-
-    els.interactionSurface.addEventListener('pointerdown', onPointerDown);
-    els.interactionSurface.addEventListener('pointermove', onPointerMove);
-    els.interactionSurface.addEventListener('pointerup', onPointerUp);
-    els.interactionSurface.addEventListener('pointercancel', onPointerUp);
-
-    els.playBtn.addEventListener('click', playPause);
-    els.restartBtn.addEventListener('click', restart);
-    els.timeline.addEventListener('input', () => {
-      pause();
-      state.currentTime = Number(els.timeline.value) || 0;
-      renderHorses();
-      renderPlayback();
-    });
-    els.playbackRate.addEventListener('change', () => { state.playbackRate = Number(els.playbackRate.value) || 1; });
-
-    els.lineName.addEventListener('input', () => updateLineField('name', els.lineName.value || 'Untitled Line'));
-    els.lineColor.addEventListener('input', () => updateLineField('color', els.lineColor.value));
-    els.horseCount.addEventListener('change', () => updateLineField('horseCount', clamp(Math.round(Number(els.horseCount.value) || 1), 1, 60)));
-    els.startDelay.addEventListener('change', () => updateLineField('startDelay', clamp(Number(els.startDelay.value) || 0, 0, 300)));
-    els.lineSpeed.addEventListener('change', () => updateLineField('speedMph', clamp(Number(els.lineSpeed.value) || 1, 1, 35)));
-    els.horseSpacing.addEventListener('change', () => updateLineField('spacingFt', clamp(Number(els.horseSpacing.value) || 3, 3, 80)));
-
-    els.drillName.addEventListener('input', () => {
-      state.drill.name = els.drillName.value;
-      markDirty();
-    });
-    els.saveBtn.addEventListener('click', () => saveDrill(true));
-    els.exampleBtn.addEventListener('click', loadExample);
-    els.exportBtn.addEventListener('click', exportDrill);
-    els.importBtn.addEventListener('click', () => els.importInput.click());
-    els.importInput.addEventListener('change', () => importDrill(els.importInput.files?.[0]));
-    els.presentationBtn.addEventListener('click', togglePresentation);
-    els.fitBtn.addEventListener('click', () => toast('Arena automatically fits the available screen'));
-
-    window.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        if (state.drawMode) stopDrawing();
-        else if (document.body.classList.contains('presentation')) togglePresentation();
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        saveDrill(true);
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && document.activeElement?.tagName !== 'INPUT') {
-        event.preventDefault();
-        undoLastStep();
-      }
-      if (event.code === 'Space' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'SELECT') {
-        event.preventDefault();
-        playPause();
-      }
-    });
-
-    window.addEventListener('beforeunload', () => { if (state.dirty) saveDrill(false); });
-  }
-
-  function init() {
-    bindEvents();
-    loadSaved();
-    els.drillName.value = state.drill.name || 'San Antonio Grand Entry';
-    renderAll();
-  }
-
+  function uid(prefix='id'){return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`;}
+  function clamp(v,min,max){return Math.min(max,Math.max(min,v));}
+  function distPx(a,b){return Math.hypot(b.x-a.x,b.y-a.y);}
+  function distFt(a,b){const dx=((b.x-a.x)/ARENA.width)*state.drill.arena.lengthFt;const dy=((b.y-a.y)/ARENA.height)*state.drill.arena.widthFt;return Math.hypot(dx,dy);}
+  function pointsDistanceFt(points){let total=0;for(let i=1;i<points.length;i++)total+=distFt(points[i-1],points[i]);return total;}
+  function mphToFps(mph){return Math.max(.1,Number(mph)||0)*1.4666667;}
+  function formatTime(seconds,tenths=false){const value=Math.max(0,Number(seconds)||0),m=Math.floor(value/60),s=value-m*60;return tenths?`${m}:${s.toFixed(1).padStart(4,'0')}`:`${m}:${Math.floor(s).toString().padStart(2,'0')}`;}
+  function svgEl(tag,attrs={}){const el=document.createElementNS(SVG_NS,tag);for(const [k,v] of Object.entries(attrs))if(v!==undefined&&v!==null)el.setAttribute(k,String(v));return el;}
+  function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function setInputValue(input,value){if(document.activeElement!==input)input.value=String(value??'');}
+
+  function makeEmptyDrill(){return {version:2,id:uid('drill'),name:'San Antonio Grand Entry',venue:'Frost Bank Center / AT&T Center, San Antonio, Texas',arena:{lengthFt:ARENA.lengthFt,widthFt:ARENA.widthFt},autoWeave:true,smartStraighten:true,straightenStrength:'balanced',lines:[],updatedAt:new Date().toISOString()};}
+  function makeLine(){const i=state.drill.lines.length;return {id:uid('line'),name:`Line ${i+1}`,color:ROUTE_COLORS[i%ROUTE_COLORS.length],horseCount:4,speedMph:10,spacingFt:12,startDelay:0,formation:'single',lateralGapFt:8,segments:[]};}
+  function selectedLine(){return state.drill.lines.find(l=>l.id===state.selectedLineId)||null;}
+  function normalizeDrill(drill){drill.version=2;drill.autoWeave=drill.autoWeave!==false;drill.smartStraighten=drill.smartStraighten!==false;drill.straightenStrength=drill.straightenStrength||'balanced';drill.arena=drill.arena||{lengthFt:200,widthFt:100};for(const line of drill.lines){line.formation=line.formation||'single';line.lateralGapFt=clamp(Number(line.lateralGapFt)||8,5,30);line.spacingFt=clamp(Number(line.spacingFt)||12,3,80);line.horseCount=clamp(Math.round(Number(line.horseCount)||1),1,60);line.speedMph=clamp(Number(line.speedMph)||10,1,35);line.startDelay=clamp(Number(line.startDelay)||0,0,300);line.segments=line.segments||[];}return drill;}
+
+  function formationOffset(line,index){const gap=Math.max(5,Number(line.lateralGapFt)||8),spacing=Math.max(3,Number(line.spacingFt)||12),type=line.formation||'single';if(type==='pairs'){const row=Math.floor(index/2),col=index%2;return{backFt:row*spacing,sideFt:(col?1:-1)*gap/2};}if(type==='four'){const row=Math.floor(index/4),col=index%4;return{backFt:row*spacing,sideFt:(col-1.5)*gap};}if(type==='vee'){if(index===0)return{backFt:0,sideFt:0};const rank=Math.ceil(index/2),side=index%2?1:-1;return{backFt:rank*spacing*.72,sideFt:side*rank*gap*.72};}return{backFt:index*spacing,sideFt:0};}
+  function maxBackOffset(line){let max=0;for(let i=0;i<line.horseCount;i++)max=Math.max(max,formationOffset(line,i).backFt);return max;}
+  function getLastMoveEnd(line){for(let i=line.segments.length-1;i>=0;i--){const s=line.segments[i];if(s.type==='move'&&s.points?.length)return s.points[s.points.length-1];}return null;}
+  function routePoints(line){const points=[];for(const s of line.segments){if(s.type!=='move'||!s.points?.length)continue;for(const p of s.points){if(!points.length||distPx(points[points.length-1],p)>.01)points.push(p);}}return points;}
+  function routePointsWithDistance(line){const points=routePoints(line);let total=0;return points.map((p,i)=>{if(i)total+=distFt(points[i-1],p);return{...p,distanceFt:total};});}
+
+  function compileLine(line,extraDelay=0){const speedFps=mphToFps(line.speedMph),events=[];let cumulative=0,elapsed=Math.max(0,Number(line.startDelay)||0)+Math.max(0,extraDelay||0);for(const s of line.segments){if(s.type==='move'){const distance=pointsDistanceFt(s.points||[]),duration=distance/speedFps;events.push({type:'move',startTime:elapsed,endTime:elapsed+duration,startDistance:cumulative,endDistance:cumulative+distance,duration,distance});cumulative+=distance;elapsed+=duration;}else if(s.type==='hold'){const duration=Math.max(0,Number(s.duration)||0);events.push({type:'hold',startTime:elapsed,endTime:elapsed+duration,distance:cumulative,duration});elapsed+=duration;}}const tailDistance=maxBackOffset(line),tailDuration=cumulative>0?tailDistance/speedFps:0;return{events,speedFps,totalDistance:cumulative,choreographyEnd:elapsed,tailDuration,totalTime:cumulative>0?elapsed+tailDuration:0,startDelay:Math.max(0,Number(line.startDelay)||0)+Math.max(0,extraDelay||0)};}
+  function leadDistanceAtTime(line,time,extraDelay=0){const c=compileLine(line,extraDelay);if(!c.totalDistance)return{distance:0,active:false,compiled:c};if(time<c.startDelay)return{distance:0,active:true,compiled:c};for(const e of c.events){if(time<e.startTime)break;if(time<=e.endTime){if(e.type==='hold')return{distance:e.distance,active:true,compiled:c};const p=e.duration?clamp((time-e.startTime)/e.duration,0,1):1;return{distance:e.startDistance+e.distance*p,active:true,compiled:c};}}const after=Math.max(0,time-c.choreographyEnd);return{distance:c.totalDistance+after*c.speedFps,active:time<=c.totalTime,compiled:c};}
+  function leadTimeAtDistance(line,targetFt,extraDelay=0){const c=compileLine(line,extraDelay),target=Math.max(0,targetFt);if(target<=0)return c.startDelay;for(const e of c.events){if(e.type==='move'&&target<=e.endDistance+.0001){const within=clamp(target-e.startDistance,0,e.distance);return e.startTime+(e.distance?within/e.distance*e.duration:0);}}return c.choreographyEnd+Math.max(0,target-c.totalDistance)/c.speedFps;}
+  function pointAtDistance(line,targetFt){const points=routePoints(line);if(!points.length)return null;if(points.length===1)return{...points[0],angle:0};if(targetFt<=0){const n=points[1];return{...points[0],angle:Math.atan2(n.y-points[0].y,n.x-points[0].x)*180/Math.PI};}let walked=0;for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],seg=distFt(a,b);if(walked+seg>=targetFt){const t=seg?(targetFt-walked)/seg:0;return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,angle:Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI};}walked+=seg;}const a=points[points.length-2],b=points[points.length-1];return{...b,angle:Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI};}
+
+  function segmentIntersection(a,b,c,d){const r={x:b.x-a.x,y:b.y-a.y},s={x:d.x-c.x,y:d.y-c.y},cross=(u,v)=>u.x*v.y-u.y*v.x,den=cross(r,s);if(Math.abs(den)<1e-6)return null;const ca={x:c.x-a.x,y:c.y-a.y},t=cross(ca,s)/den,u=cross(ca,r)/den;if(t<=.025||t>=.975||u<=.025||u>=.975)return null;const angle=Math.abs(Math.atan2(cross(r,s),r.x*s.x+r.y*s.y))*180/Math.PI,acute=Math.min(angle,180-angle);if(acute<24)return null;return{x:a.x+t*r.x,y:a.y+t*r.y,t,u,angle:acute};}
+  function detectCrossings(){const results=[];for(let ai=0;ai<state.drill.lines.length;ai++){const A=state.drill.lines[ai],ap=routePointsWithDistance(A);if(ap.length<2)continue;for(let bi=ai+1;bi<state.drill.lines.length;bi++){const B=state.drill.lines[bi],bp=routePointsWithDistance(B);if(bp.length<2)continue;for(let i=1;i<ap.length;i++){for(let j=1;j<bp.length;j++){const hit=segmentIntersection(ap[i-1],ap[i],bp[j-1],bp[j]);if(!hit)continue;const aSeg=distFt(ap[i-1],ap[i]),bSeg=distFt(bp[j-1],bp[j]),aDistance=ap[i-1].distanceFt+aSeg*hit.t,bDistance=bp[j-1].distanceFt+bSeg*hit.u;if(results.some(r=>r.aId===A.id&&r.bId===B.id&&distPx(r.point,hit)<14))continue;results.push({id:uid('cross'),aId:A.id,bId:B.id,point:{x:hit.x,y:hit.y},aDistance,bDistance,angle:hit.angle});}}}}return results;}
+  function arrivalTimes(line,crossDistance,extraDelay){const times=[];for(let i=0;i<line.horseCount;i++){const offset=formationOffset(line,i);times.push(leadTimeAtDistance(line,crossDistance+offset.backFt,extraDelay));}return times.sort((a,b)=>a-b);}
+  function minGap(a,b){let i=0,j=0,min=Infinity;while(i<a.length&&j<b.length){min=Math.min(min,Math.abs(a[i]-b[j]));if(a[i]<b[j])i++;else j++;}return min;}
+  function crossingGap(cross,delays){const A=state.drill.lines.find(l=>l.id===cross.aId),B=state.drill.lines.find(l=>l.id===cross.bId);if(!A||!B)return Infinity;return minGap(arrivalTimes(A,cross.aDistance,delays.get(A.id)||0),arrivalTimes(B,cross.bDistance,delays.get(B.id)||0));}
+  function computeSafetyPlan(){const crossings=detectCrossings(),delays=new Map(state.drill.lines.map(l=>[l.id,0]));if(state.drill.autoWeave&&crossings.length){for(let idx=1;idx<state.drill.lines.length;idx++){const line=state.drill.lines[idx],relevant=crossings.filter(c=>c.aId===line.id||c.bId===line.id).filter(c=>{const other=c.aId===line.id?c.bId:c.aId;return state.drill.lines.findIndex(l=>l.id===other)<idx;});if(!relevant.length)continue;let best=0,bestGap=-1,found=false;for(let candidate=0;candidate<=MAX_AUTO_DELAY_SEC;candidate+=AUTO_DELAY_STEP_SEC){delays.set(line.id,candidate);let worst=Infinity;for(const c of relevant)worst=Math.min(worst,crossingGap(c,delays));if(worst>bestGap){bestGap=worst;best=candidate;}if(worst>=SAFE_CROSSING_GAP_SEC){found=true;best=candidate;break;}}delays.set(line.id,best);if(!found){}}}const unresolved=[];for(const c of crossings){const gap=crossingGap(c,delays);c.gap=gap;c.safe=gap>=SAFE_CROSSING_GAP_SEC;if(!c.safe)unresolved.push(c);}state.safetyPlan={crossings,delays,unresolved,totalAutoDelay:[...delays.values()].reduce((s,v)=>s+v,0)};}
+  function safetyDelay(line){return state.drill.autoWeave?(state.safetyPlan.delays.get(line.id)||0):0;}
+  function drillDuration(){return state.drill.lines.reduce((m,l)=>Math.max(m,compileLine(l,safetyDelay(l)).totalTime),0);}
+
+  function pathD(points){if(!points.length)return'';if(points.length===1)return`M ${points[0].x} ${points[0].y}`;if(points.length===2)return`M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;let d=`M ${points[0].x} ${points[0].y}`;for(let i=1;i<points.length-1;i++){const mx=(points[i].x+points[i+1].x)/2,my=(points[i].y+points[i+1].y)/2;d+=` Q ${points[i].x} ${points[i].y} ${mx} ${my}`;}const last=points[points.length-1];return d+` L ${last.x} ${last.y}`;}
+  function perpendicularDistance(p,a,b){const dx=b.x-a.x,dy=b.y-a.y;if(!dx&&!dy)return distPx(p,a);const t=((p.x-a.x)*dx+(p.y-a.y)*dy)/(dx*dx+dy*dy),q={x:a.x+t*dx,y:a.y+t*dy};return distPx(p,q);}
+  function rdp(points,epsilon){if(points.length<3)return points.map(p=>({...p}));let max=0,index=0;for(let i=1;i<points.length-1;i++){const d=perpendicularDistance(points[i],points[0],points[points.length-1]);if(d>max){max=d;index=i;}}if(max>epsilon){const left=rdp(points.slice(0,index+1),epsilon),right=rdp(points.slice(index),epsilon);return left.slice(0,-1).concat(right);}return[{...points[0]},{...points[points.length-1]}];}
+  function smoothPoints(points,passes=1){let out=points.map(p=>({...p}));for(let p=0;p<passes;p++){const next=[out[0]];for(let i=1;i<out.length-1;i++)next.push({x:(out[i-1].x+2*out[i].x+out[i+1].x)/4,y:(out[i-1].y+2*out[i].y+out[i+1].y)/4});next.push(out[out.length-1]);out=next;}return out;}
+  function maxLineDeviation(points){if(points.length<3)return 0;let max=0;for(let i=1;i<points.length-1;i++)max=Math.max(max,perpendicularDistance(points[i],points[0],points[points.length-1]));return max;}
+  function smartCleanPoints(points,strength='balanced',force=false){if(points.length<=2)return points.map(p=>({...p}));const cfg={gentle:{smooth:1,eps:2.5,straight:5.5,ratio:1.018},balanced:{smooth:1,eps:4,straight:8,ratio:1.035},strong:{smooth:2,eps:7,straight:13,ratio:1.07}}[strength]||{smooth:1,eps:4,straight:8,ratio:1.035};let work=smoothPoints(points,cfg.smooth),chord=distPx(work[0],work[work.length-1]),path=work.slice(1).reduce((s,p,i)=>s+distPx(work[i],p),0),ratio=chord?path/chord:999;if(chord>34&&(maxLineDeviation(work)<=cfg.straight||ratio<=cfg.ratio||force&&ratio<1.16))return[{...work[0]},{...work[work.length-1]}];return rdp(work,force?cfg.eps*1.45:cfg.eps);}
+
+  function renderAll(){computeSafetyPlan();renderLineList();renderEditor();renderRoutes();renderSafety();renderPlayback();updateEmptyState();}
+  function renderLineList(){els.lineList.replaceChildren();for(const line of state.drill.lines){const extra=safetyDelay(line),card=document.createElement('button');card.type='button';card.className=`line-card${line.id===state.selectedLineId?' selected':''}`;card.innerHTML=`<span class="line-swatch" style="background:${escapeHtml(line.color)}"></span><span><span class="line-card-name">${escapeHtml(line.name)}</span><span class="line-card-meta">${line.horseCount} horses · ${line.formation||'single'}${extra>.01?` · +${extra.toFixed(1)}s weave`:''}</span></span><span class="line-card-badge">${line.horseCount}</span>`;card.addEventListener('click',()=>selectLine(line.id));els.lineList.appendChild(card);}}
+  function renderEditor(){const line=selectedLine();els.noSelection.classList.toggle('hidden',!!line);els.lineEditor.classList.toggle('hidden',!line);els.clearLineBtn.disabled=!line||!line.segments.length;els.undoBtn.disabled=!line||!line.segments.length;if(!line)return;els.editorTitle.textContent=line.name;setInputValue(els.lineName,line.name);setInputValue(els.lineColor,line.color);setInputValue(els.horseCount,line.horseCount);setInputValue(els.startDelay,line.startDelay);setInputValue(els.lineSpeed,line.speedMph);setInputValue(els.horseSpacing,line.spacingFt);setInputValue(els.formation,line.formation);setInputValue(els.lateralGap,line.lateralGapFt);els.smartStraighten.checked=state.drill.smartStraighten!==false;setInputValue(els.straightenStrength,state.drill.straightenStrength||'balanced');const hasMove=line.segments.some(s=>s.type==='move'),last=line.segments[line.segments.length-1];els.addHoldBtn.disabled=!hasMove||!last||last.type==='hold';els.straightenLastBtn.disabled=!hasMove;els.drawSegmentBtn.textContent=hasMove?'Draw next movement':'Draw first movement';els.drawSegmentBtn.classList.toggle('active',state.drawMode);els.sequenceList.replaceChildren();line.segments.forEach((s,i)=>{const item=document.createElement('div');item.className='sequence-item';const move=s.type==='move';item.innerHTML=`<span class="sequence-number">${i+1}</span><span class="sequence-main"><strong>${move?'Movement':'Stop / hold'}</strong><span>${move?`${Math.round(pointsDistanceFt(s.points))} ft movement`:`${Number(s.duration).toFixed(Number(s.duration)%1?1:0)} sec hold`}</span></span><button class="sequence-remove" type="button" aria-label="Remove step ${i+1}">×</button>`;item.querySelector('button').addEventListener('click',()=>removeSegment(i));els.sequenceList.appendChild(item);});els.stepCount.textContent=`${line.segments.length} step${line.segments.length===1?'':'s'}`;const c=compileLine(line,safetyDelay(line));els.distanceStat.textContent=`${Math.round(c.totalDistance)} ft`;els.lineTimeStat.textContent=formatTime(c.totalTime);els.weaveStat.textContent=`${safetyDelay(line).toFixed(1)} sec`;els.teamStat.textContent=`${teamHorseCount()} horses`;}
+  function renderRoutes(){els.routeLayer.replaceChildren();for(const line of state.drill.lines)renderLineRoute(line);renderDraft();renderHorses();}
+  function renderLineRoute(line){const selected=line.id===state.selectedLineId;let first=null,last=null,lastMoveEnd=null,moveIndex=0;for(const s of line.segments){if(s.type==='move'&&s.points.length>=2){moveIndex++;const d=pathD(s.points);els.routeLayer.appendChild(svgEl('path',{d,class:'route-path-shadow'}));els.routeLayer.appendChild(svgEl('path',{d,class:`route-path${selected?'':' unselected'}`,stroke:line.color}));const mid=s.points[Math.floor(s.points.length/2)],bg=svgEl('circle',{cx:mid.x,cy:mid.y,r:10,fill:'#17140f',opacity:selected?'.85':'.55'}),label=svgEl('text',{x:mid.x,y:mid.y+.3,class:'segment-index'});label.textContent=moveIndex;els.routeLayer.append(bg,label);if(!first)first=s.points[0];last=s.points[s.points.length-1];lastMoveEnd=last;}else if(s.type==='hold'&&lastMoveEnd){const ring=svgEl('circle',{cx:lastMoveEnd.x,cy:lastMoveEnd.y,r:16,class:'stop-marker-ring',stroke:line.color}),txt=svgEl('text',{x:lastMoveEnd.x,y:lastMoveEnd.y+.5,class:'stop-marker-text'});txt.textContent=`${s.duration}s`;els.routeLayer.append(ring,txt);}}if(first)els.routeLayer.appendChild(svgEl('circle',{cx:first.x,cy:first.y,r:7,fill:line.color,class:'route-start'}));if(last)els.routeLayer.appendChild(svgEl('circle',{cx:last.x,cy:last.y,r:6,class:'route-end',stroke:line.color}));}
+  function renderDraft(){els.draftLayer.replaceChildren();if(state.draftPoints.length>1)els.draftLayer.appendChild(svgEl('path',{d:pathD(state.draftPoints),class:'draft-path'}));}
+  function horsePose(line,time,index){const extra=safetyDelay(line),lead=leadDistanceAtTime(line,time,extra),offset=formationOffset(line,index),distance=lead.distance-offset.backFt;if(distance<-.01||distance>lead.compiled.totalDistance+.01)return null;const base=pointAtDistance(line,clamp(distance,0,lead.compiled.totalDistance));if(!base)return null;const radians=base.angle*Math.PI/180,sidePx=offset.sideFt*PX_PER_FT;return{x:base.x-Math.sin(radians)*sidePx,y:base.y+Math.cos(radians)*sidePx,angle:base.angle};}
+  function renderHorses(){els.horseLayer.replaceChildren();for(const line of state.drill.lines){for(let i=0;i<line.horseCount;i++){const p=horsePose(line,state.currentTime,i);if(p)els.horseLayer.appendChild(makeHorseMarker(p,line,i+1));}}}
+  function makeHorseMarker(p,line,n){const g=svgEl('g',{class:'horse-marker',transform:`translate(${p.x} ${p.y}) rotate(${p.angle+90})`}),body=svgEl('ellipse',{cx:0,cy:0,rx:8.5,ry:12.5,fill:line.color,class:'horse-body'}),head=svgEl('circle',{cx:0,cy:-13,r:4.3,class:'horse-head'}),dir=svgEl('path',{d:'M -3 -20 L 0 -25 L 3 -20 Z',class:'horse-direction'}),txt=svgEl('text',{x:0,y:.5,class:'horse-number'});txt.textContent=n;g.append(body,head,dir,txt);return g;}
+  function renderSafety(){els.safetyLayer.replaceChildren();const p=state.safetyPlan;for(const c of p.crossings){const cls=c.safe?'safe':'danger',circle=svgEl('circle',{cx:c.point.x,cy:c.point.y,r:12,class:`crossing-marker ${cls}`}),a=svgEl('path',{d:`M ${c.point.x-5} ${c.point.y-5} L ${c.point.x+5} ${c.point.y+5}`,class:'crossing-x',stroke:c.safe?'#9bd2a7':'#ef8580'}),b=svgEl('path',{d:`M ${c.point.x+5} ${c.point.y-5} L ${c.point.x-5} ${c.point.y+5}`,class:'crossing-x',stroke:c.safe?'#9bd2a7':'#ef8580'});els.safetyLayer.append(circle,a,b);}const unresolved=p.unresolved.length,crossings=p.crossings.length,auto=state.drill.autoWeave;if(!crossings)setSafetyUi('safe',auto?'AUTO-WEAVE ON':'AUTO-WEAVE OFF','Safety ready','No route crossings yet.');else if(unresolved)setSafetyUi('danger',auto?'AUTO-WEAVE NEEDS HELP':'AUTO-WEAVE OFF','Unsafe crossing blocked',`${unresolved} crossing${unresolved===1?'':'s'} still overlap. Increase horse spacing, change speed, or redraw the crossing.`);else setSafetyUi('safe',auto?'AUTO-WEAVE ON':'AUTO-WEAVE OFF','Crossings synchronized',`${crossings} X crossing${crossings===1?'':'s'} checked · ${p.totalAutoDelay.toFixed(1)} sec of automatic timing added.`);}
+  function setSafetyUi(cls,btn,title,detail){els.safetyBtn.className=`safety-badge ${cls}`;els.safetyBtn.textContent=btn;els.safetyStrip.className=`safety-strip ${cls}`;els.safetyTitle.textContent=title;els.safetyDetail.textContent=detail;}
+  function renderPlayback(){const d=drillDuration();state.currentTime=clamp(state.currentTime,0,d||0);els.timeline.max=String(Math.max(.01,d));els.timeline.value=String(state.currentTime);els.timeLabel.textContent=formatTime(state.currentTime,true);els.durationLabel.textContent=formatTime(d,true);els.playBtn.textContent=state.isPlaying?'❚❚':'▶';els.playBtn.setAttribute('aria-label',state.isPlaying?'Pause drill':'Play drill');}
+  function updateEmptyState(){const has=state.drill.lines.some(l=>l.segments.some(s=>s.type==='move'));els.emptyArena.classList.toggle('hidden',has||state.drawMode);els.drawHint.classList.toggle('hidden',!state.drawMode);}
+
+  function selectLine(id){stopDrawing();state.selectedLineId=id;renderAll();}
+  function addLine(){pause();const line=makeLine();state.drill.lines.push(line);state.selectedLineId=line.id;state.currentTime=0;markDirty();renderAll();requestAnimationFrame(()=>els.lineName.focus());}
+  function deleteSelectedLine(){const line=selectedLine();if(!line)return;const i=state.drill.lines.findIndex(x=>x.id===line.id);state.drill.lines.splice(i,1);state.selectedLineId=state.drill.lines[Math.min(i,state.drill.lines.length-1)]?.id||null;state.currentTime=0;markDirty();renderAll();toast('Line deleted');}
+  function clearSelectedLine(){const line=selectedLine();if(!line||!line.segments.length)return;line.segments=[];state.currentTime=0;markDirty();renderAll();toast('Selected route cleared');}
+  function removeSegment(index){const line=selectedLine();if(!line)return;line.segments.splice(index,1);normalizeSegmentStarts(line);state.currentTime=0;markDirty();renderAll();}
+  function undoLastStep(){const line=selectedLine();if(!line||!line.segments.length)return;line.segments.pop();state.currentTime=0;markDirty();renderAll();toast('Last step removed');}
+  function normalizeSegmentStarts(line){let end=null;for(const s of line.segments){if(s.type==='move'&&s.points.length){if(end)s.points[0]={...end};end=s.points[s.points.length-1];}}}
+  function beginDrawMode(){const line=selectedLine();if(!line){addLine();return;}pause();state.drawMode=!state.drawMode;state.drawing=false;state.draftPoints=[];els.interactionSurface.style.cursor=state.drawMode?'crosshair':'';renderEditor();renderDraft();updateEmptyState();}
+  function stopDrawing(){state.drawMode=false;state.drawing=false;state.draftPoints=[];els.interactionSurface.style.cursor='';renderDraft();updateEmptyState();}
+  function pointerToArena(e){const point=els.arena.createSVGPoint();point.x=e.clientX;point.y=e.clientY;const matrix=els.arena.getScreenCTM();if(!matrix)return null;const p=point.matrixTransform(matrix.inverse());return{x:clamp(p.x,ARENA.x,ARENA.x+ARENA.width),y:clamp(p.y,ARENA.y,ARENA.y+ARENA.height)};}
+  function onPointerDown(e){if(!state.drawMode||!selectedLine())return;e.preventDefault();els.interactionSurface.setPointerCapture?.(e.pointerId);state.drawing=true;const p=pointerToArena(e);if(!p)return;const end=getLastMoveEnd(selectedLine());state.draftPoints=end?[{...end}]:[];if(!end||distPx(end,p)>2)state.draftPoints.push(p);renderDraft();}
+  function onPointerMove(e){if(!state.drawMode||!state.drawing)return;e.preventDefault();const p=pointerToArena(e);if(!p)return;const last=state.draftPoints[state.draftPoints.length-1];if(!last||distPx(last,p)>=3){state.draftPoints.push(p);renderDraft();}}
+  function onPointerUp(e){if(!state.drawMode||!state.drawing)return;e.preventDefault();state.drawing=false;const line=selectedLine();if(!line)return stopDrawing();let points=state.draftPoints;if(state.drill.smartStraighten!==false)points=smartCleanPoints(points,state.drill.straightenStrength||'balanced');else points=rdp(points,2.5);if(points.length>=2&&pointsDistanceFt(points)>=3){line.segments.push({type:'move',id:uid('move'),points});state.currentTime=0;markDirty();toast(state.drill.smartStraighten!==false?'Movement added and cleaned up':'Movement added');}else toast('Draw a longer movement path');stopDrawing();renderAll();}
+  function straightenLast(){const line=selectedLine();if(!line)return;for(let i=line.segments.length-1;i>=0;i--){const s=line.segments[i];if(s.type==='move'&&s.points.length>=2){s.points=smartCleanPoints(s.points,state.drill.straightenStrength||'balanced',true);markDirty();renderAll();toast('Last movement straightened');return;}}}
+  function addHold(){const line=selectedLine();if(!line)return;const last=line.segments[line.segments.length-1];if(!last||last.type!=='move')return;const duration=clamp(Number(els.holdSeconds.value)||10,.5,300);line.segments.push({type:'hold',id:uid('hold'),duration});state.currentTime=0;markDirty();renderAll();toast(`${duration}-second stop added`);}
+
+  function playPause(){const duration=drillDuration();if(!duration){toast('Draw at least one movement before playing');return;}if(state.safetyPlan.unresolved.length){toast('Playback blocked: fix the red crossing warning first');return;}if(state.isPlaying)return pause();if(state.currentTime>=duration-.01)state.currentTime=0;state.isPlaying=true;state.lastFrame=performance.now();renderPlayback();state.raf=requestAnimationFrame(tick);}
+  function pause(){state.isPlaying=false;if(state.raf)cancelAnimationFrame(state.raf);state.raf=0;renderPlayback();}
+  function tick(now){if(!state.isPlaying)return;const delta=Math.min(.08,(now-state.lastFrame)/1000);state.lastFrame=now;state.currentTime+=delta*state.playbackRate;const duration=drillDuration();if(state.currentTime>=duration){state.currentTime=duration;state.isPlaying=false;}renderHorses();renderPlayback();if(state.isPlaying)state.raf=requestAnimationFrame(tick);}
+  function restart(){pause();state.currentTime=0;renderHorses();renderPlayback();}
+  function updateLineField(field,value){const line=selectedLine();if(!line)return;line[field]=value;state.currentTime=0;markDirty();renderAll();}
+  function teamHorseCount(){return state.drill.lines.reduce((s,l)=>s+Math.max(0,Number(l.horseCount)||0),0);}
+  function markDirty(){state.dirty=true;state.drill.updatedAt=new Date().toISOString();els.saveBtn.textContent='Save';}
+  function saveDrill(show=true){try{state.drill.name=els.drillName.value.trim()||'Untitled Drill';state.drill.updatedAt=new Date().toISOString();localStorage.setItem(STORAGE_KEY,JSON.stringify(state.drill));state.dirty=false;els.saveBtn.textContent='Saved';if(show)toast('Drill saved on this device');setTimeout(()=>{if(!state.dirty)els.saveBtn.textContent='Save';},1200);}catch(err){console.error(err);toast('Could not save this drill');}}
+  function validateDrill(d){return!!d&&typeof d==='object'&&Array.isArray(d.lines)&&d.lines.every(l=>l&&Array.isArray(l.segments));}
+  function loadSaved(){try{const raw=localStorage.getItem(STORAGE_KEY)||localStorage.getItem('rodeo-drill-designer-v1');if(!raw)return false;const parsed=JSON.parse(raw);if(!validateDrill(parsed))return false;state.drill=normalizeDrill(parsed);state.selectedLineId=parsed.lines[0]?.id||null;els.drillName.value=parsed.name||'San Antonio Grand Entry';return true;}catch(err){console.warn(err);return false;}}
+  function exportDrill(){saveDrill(false);const blob=new Blob([JSON.stringify(state.drill,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`${slugify(state.drill.name||'rodeo-drill')}.json`;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);toast('Drill exported');}
+  function importDrill(file){if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result));if(!validateDrill(parsed))throw new Error('Invalid');pause();state.drill=normalizeDrill(parsed);state.selectedLineId=parsed.lines[0]?.id||null;state.currentTime=0;els.drillName.value=parsed.name||'Imported Drill';markDirty();renderAll();saveDrill(false);toast('Drill imported');}catch(err){console.error(err);toast('That file is not a valid Rodeo drill');}els.importInput.value='';};reader.readAsText(file);}
+  function slugify(v){return v.toLowerCase().trim().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'rodeo-drill';}
+  function sampleCurve(anchors){const points=[];for(let i=1;i<anchors.length;i++){const [x1,y1]=anchors[i-1],[x2,y2]=anchors[i],steps=Math.max(2,Math.ceil(Math.hypot(x2-x1,y2-y1)/18));for(let s=i===1?0:1;s<=steps;s++){const t=s/steps;points.push({x:x1+(x2-x1)*t,y:y1+(y2-y1)*t});}}return points;}
+  function movement(anchors){return{type:'move',id:uid('move'),points:sampleCurve(anchors)};}
+  function loadExample(){pause();state.drill=makeEmptyDrill();state.drill.name='Alternating X-Cross Example';state.drill.lines=[{id:uid('line'),name:'Gold Left',color:ROUTE_COLORS[0],horseCount:6,speedMph:10,spacingFt:18,startDelay:0,formation:'single',lateralGapFt:8,segments:[movement([[60,160],[230,160],[500,280],[770,400],[940,400]])]},{id:uid('line'),name:'Blue Right',color:ROUTE_COLORS[1],horseCount:6,speedMph:10,spacingFt:18,startDelay:0,formation:'single',lateralGapFt:8,segments:[movement([[940,160],[770,160],[500,280],[230,400],[60,400]])]}];state.selectedLineId=state.drill.lines[0].id;state.currentTime=0;els.drillName.value=state.drill.name;markDirty();renderAll();toast('Crossing example loaded — Auto-Weave times the X');}
+  function generateShowcase(){pause();const requested=teamHorseCount()||24,total=clamp(requested,8,60),counts=[0,0,0,0];for(let i=0;i<total;i++)counts[i%4]++;const make=(name,color,count,anchors,formation='pairs',speed=11,spacing=20)=>({id:uid('line'),name,color,horseCount:count,speedMph:speed,spacingFt:spacing,startDelay:0,formation,lateralGapFt:8,segments:[movement(anchors)]});state.drill=makeEmptyDrill();state.drill.name='Championship Showcase';state.drill.straightenStrength='balanced';state.drill.lines=[make('Gold North',ROUTE_COLORS[0],counts[0],[[58,205],[185,120],[360,105],[500,280],[640,455],[815,440],[942,355]],'pairs'),make('Blue South',ROUTE_COLORS[1],counts[1],[[942,205],[815,120],[640,105],[500,280],[360,455],[185,440],[58,355]],'pairs'),make('Crimson Sweep',ROUTE_COLORS[2],counts[2],[[58,355],[170,430],[350,420],[500,280],[650,140],[830,130],[942,205]],'single'),make('Emerald Sweep',ROUTE_COLORS[3],counts[3],[[942,355],[830,430],[650,420],[500,280],[350,140],[170,130],[58,205]],'single')].filter(l=>l.horseCount>0);state.selectedLineId=state.drill.lines[0]?.id||null;state.currentTime=0;els.drillName.value=state.drill.name;markDirty();renderAll();if(state.safetyPlan.unresolved.length){for(const line of state.drill.lines)line.spacingFt=Math.max(line.spacingFt,24);renderAll();}toast(`Showcase generated for ${total} horses · ${state.safetyPlan.crossings.length} crossings synchronized`);}
+
+  function toast(msg){clearTimeout(state.toastTimer);els.toast.textContent=msg;els.toast.classList.add('show');state.toastTimer=setTimeout(()=>els.toast.classList.remove('show'),2400);}
+  function togglePresentation(){document.body.classList.toggle('presentation');const active=document.body.classList.contains('presentation');els.presentationBtn.textContent=active?'Exit Team View':'Team View';if(active)toast('Team View — press Esc to exit');}
+  function toggleSafety(){state.drill.autoWeave=!state.drill.autoWeave;pause();state.currentTime=0;markDirty();renderAll();toast(state.drill.autoWeave?'Auto-Weave enabled':'Auto-Weave disabled — unsafe crossings will block playback');}
+  function bindEvents(){els.addLineBtn.addEventListener('click',addLine);els.addLineEmptyBtn.addEventListener('click',addLine);els.deleteLineBtn.addEventListener('click',deleteSelectedLine);els.clearLineBtn.addEventListener('click',clearSelectedLine);els.undoBtn.addEventListener('click',undoLastStep);els.drawSegmentBtn.addEventListener('click',beginDrawMode);els.addHoldBtn.addEventListener('click',addHold);els.straightenLastBtn.addEventListener('click',straightenLast);els.interactionSurface.addEventListener('pointerdown',onPointerDown);els.interactionSurface.addEventListener('pointermove',onPointerMove);els.interactionSurface.addEventListener('pointerup',onPointerUp);els.interactionSurface.addEventListener('pointercancel',onPointerUp);els.playBtn.addEventListener('click',playPause);els.restartBtn.addEventListener('click',restart);els.timeline.addEventListener('input',()=>{pause();state.currentTime=Number(els.timeline.value)||0;renderHorses();renderPlayback();});els.playbackRate.addEventListener('change',()=>{state.playbackRate=Number(els.playbackRate.value)||1;});els.lineName.addEventListener('input',()=>updateLineField('name',els.lineName.value||'Untitled Line'));els.lineColor.addEventListener('input',()=>updateLineField('color',els.lineColor.value));els.horseCount.addEventListener('change',()=>updateLineField('horseCount',clamp(Math.round(Number(els.horseCount.value)||1),1,60)));els.startDelay.addEventListener('change',()=>updateLineField('startDelay',clamp(Number(els.startDelay.value)||0,0,300)));els.lineSpeed.addEventListener('change',()=>updateLineField('speedMph',clamp(Number(els.lineSpeed.value)||1,1,35)));els.horseSpacing.addEventListener('change',()=>updateLineField('spacingFt',clamp(Number(els.horseSpacing.value)||3,3,80)));els.formation.addEventListener('change',()=>updateLineField('formation',els.formation.value));els.lateralGap.addEventListener('change',()=>updateLineField('lateralGapFt',clamp(Number(els.lateralGap.value)||8,5,30)));els.smartStraighten.addEventListener('change',()=>{state.drill.smartStraighten=els.smartStraighten.checked;markDirty();toast(state.drill.smartStraighten?'Smart Straighten ON':'Smart Straighten OFF');});els.straightenStrength.addEventListener('change',()=>{state.drill.straightenStrength=els.straightenStrength.value;markDirty();});els.drillName.addEventListener('input',()=>{state.drill.name=els.drillName.value;markDirty();});els.saveBtn.addEventListener('click',()=>saveDrill(true));els.exampleBtn.addEventListener('click',loadExample);els.exportBtn.addEventListener('click',exportDrill);els.importBtn.addEventListener('click',()=>els.importInput.click());els.importInput.addEventListener('change',()=>importDrill(els.importInput.files?.[0]));els.presentationBtn.addEventListener('click',togglePresentation);els.generatorBtn.addEventListener('click',generateShowcase);els.generatorSideBtn.addEventListener('click',generateShowcase);els.safetyBtn.addEventListener('click',toggleSafety);window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(state.drawMode)stopDrawing();else if(document.body.classList.contains('presentation'))togglePresentation();}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){e.preventDefault();saveDrill(true);}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'&&document.activeElement?.tagName!=='INPUT'){e.preventDefault();undoLastStep();}if(e.code==='Space'&&!['INPUT','SELECT','TEXTAREA'].includes(document.activeElement?.tagName)){e.preventDefault();playPause();}});window.addEventListener('beforeunload',()=>{if(state.dirty)saveDrill(false);});}
+  function init(){bindEvents();loadSaved();els.drillName.value=state.drill.name||'San Antonio Grand Entry';renderAll();}
   init();
 })();
