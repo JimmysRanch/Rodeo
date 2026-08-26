@@ -7,6 +7,7 @@
   <meta name="description" content="Touch-first animated rodeo drill playbook for horseback drill teams." />
   <title>Rodeo Drill Designer</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="easy.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -25,6 +26,12 @@
         <div class="panel-heading"><div><div class="eyebrow">Routes</div><h2>Drill lines</h2></div><button id="addLineBtn" class="icon-button" aria-label="Add line">+</button></div>
         <div id="lineList" class="line-list"></div>
         <div class="sidebar-footer">
+          <div class="easy-build-block">
+            <span class="section-kicker">Easiest way to start</span>
+            <strong>Professional Easy Build</strong>
+            <p>Build the clean two-line split and alternating figure-eight pattern automatically. No finger drawing required.</p>
+            <button id="mirrorFigureEightBtn" class="button button-easy button-full">Build 2-Line Mirrored Figure 8</button>
+          </div>
           <div class="library-block">
             <span class="section-kicker">Routine library</span>
             <select id="routineSelect" aria-label="Routine library">
@@ -62,11 +69,12 @@
             <g class="arena-markings" aria-hidden="true"><line x1="500" y1="52" x2="500" y2="508" /><ellipse cx="500" cy="280" rx="12" ry="12" /><text x="500" y="84" text-anchor="middle">NORTH END</text><text x="500" y="492" text-anchor="middle">SOUTH END</text></g>
             <g class="gate gate-left" aria-hidden="true"><rect x="35" y="235" width="28" height="90" rx="7" /><text x="74" y="284">GATE</text></g>
             <g class="gate gate-right" aria-hidden="true"><rect x="937" y="235" width="28" height="90" rx="7" /><text x="925" y="284" text-anchor="end">GATE</text></g>
+            <g class="chute-mark" aria-hidden="true"><path d="M 466 508 L 466 488 M 534 508 L 534 488"/><text x="500" y="503" text-anchor="middle">CHUTE</text></g>
             <g id="routeLayer"></g><g id="mirrorGuideLayer"></g><g id="safetyLayer"></g><g id="draftLayer"></g><g id="horseLayer"></g>
             <g><rect id="interactionSurface" x="52" y="52" width="896" height="456" rx="26" fill="transparent" /></g>
           </svg>
-          <div id="drawHint" class="draw-hint hidden"><strong>Draw the movement once</strong><span id="drawHintText">Finger wobble is cleaned up automatically.</span></div>
-          <div id="emptyArena" class="empty-arena"><div class="empty-icon">↝</div><strong>Create a line, then draw its route</strong><span>Smart Straighten cleans finger-drawn paths. Matched Lines can create perfect mirrored routes from one finger trace.</span></div>
+          <div id="drawHint" class="draw-hint hidden"><strong>Draw it roughly</strong><span id="drawHintText">Straight runs snap straight; curves are smoothed automatically.</span></div>
+          <div id="emptyArena" class="empty-arena"><div class="empty-icon">↝</div><strong>You do not have to draw perfectly</strong><span>Use Easy Build for a finished professional pattern, or draw roughly and let Professional Assist clean it up.</span></div>
         </div>
 
         <div id="safetyStrip" class="safety-strip safe"><strong id="safetyTitle">Safety ready</strong><span id="safetyDetail">No route crossings yet.</span></div>
@@ -87,15 +95,21 @@
 
           <div class="editor-section matched-tools">
             <div class="section-heading"><div><span class="section-kicker">Perfect symmetry</span><strong>Matched Lines</strong></div><span id="matchedStatus" class="step-count">Independent</span></div>
-            <p class="helper-copy">Draw one master guide. Up/down stays identical; every left/right move is mirrored perfectly to the opposite side.</p>
+            <p class="helper-copy">Draw one rough master guide. The partner lines are generated mathematically, so left/right movements match exactly.</p>
             <div class="field-grid two-col"><label class="field"><span>Number of lines</span><select id="matchedCount"><option value="2">2 lines</option><option value="3">3 lines</option><option value="4">4 lines</option></select></label><label class="field"><span>Lane separation</span><div class="input-suffix"><input id="matchedGap" type="number" min="6" max="30" step="1" value="10" /><span>ft</span></div></label></div>
             <button id="matchedGroupBtn" class="button button-match button-full">Create matched group</button>
             <button id="breakMatchedBtn" class="text-button button-full hidden">Break link and keep routes</button>
           </div>
 
           <div class="editor-section smart-tools">
-            <div class="section-heading"><div><span class="section-kicker">Finger drawing assist</span><strong>Smart Straighten</strong></div><label class="switch"><input id="smartStraighten" type="checkbox" checked /><span></span></label></div>
-            <div class="smart-row"><label class="field"><span>Cleanup strength</span><select id="straightenStrength"><option value="gentle">Gentle</option><option value="balanced" selected>Balanced</option><option value="strong">Strong</option></select></label><button id="straightenLastBtn" class="button button-secondary">Straighten last</button></div>
+            <div class="section-heading"><div><span class="section-kicker">Finger drawing assist</span><strong>Professional Assist</strong></div><label class="switch"><input id="smartStraighten" type="checkbox" checked /><span></span></label></div>
+            <p class="helper-copy">A rough straight stroke becomes an exact straight line. Rough curves are cleaned instead of copying every finger wobble.</p>
+            <div class="smart-row"><label class="field"><span>Correction strength</span><select id="straightenStrength"><option value="gentle">Gentle</option><option value="balanced" selected>Balanced</option><option value="strong">Strong</option></select></label><button id="straightenLastBtn" class="button button-secondary">Auto-clean last</button></div>
+            <div class="precision-grid">
+              <button id="perfectStraightBtn" class="button button-precision" type="button">Make Last Perfectly Straight</button>
+              <button id="smoothCurveBtn" class="button button-precision" type="button">Smooth Last Curve</button>
+              <button id="figureEightBtn" class="button button-precision button-figure" type="button">Add Perfect Figure 8</button>
+            </div>
           </div>
 
           <div class="editor-section"><div class="section-heading"><div><span class="section-kicker">Build this line</span><strong>Movement sequence</strong></div><span id="stepCount" class="step-count">0 steps</span></div><button id="drawSegmentBtn" class="button button-draw button-full">Draw first movement</button><div class="hold-builder"><label class="field compact-field"><span>Stop duration</span><div class="input-suffix"><input id="holdSeconds" type="number" min="0.5" max="300" step="0.5" value="10" /><span>sec</span></div></label><button id="addHoldBtn" class="button button-secondary" disabled>Add stop</button></div><div id="sequenceList" class="sequence-list"></div></div>
@@ -107,5 +121,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
   </div>
   <script src="app.js"></script>
+  <script src="easy-tools.js"></script>
 </body>
 </html>
