@@ -18,61 +18,61 @@
           <span>Created by Jack Alexander</span>
         </div>
       </div>
-      <div class="top-note">Tap moves. The app handles matching, curves, spacing, and timing.</div>
-      <button id="newBtn" class="top-button">New</button>
+      <div class="top-note">Start at the left gate. Tap a move, or draw one by hand.</div>
+      <button id="newBtn" class="top-button">New Routine</button>
     </header>
 
     <main class="main-grid">
       <aside class="builder" aria-label="Routine builder">
-        <section class="step step-team">
+        <section class="step team-step">
           <div class="step-title"><b>1</b><span>Set the team</span></div>
-          <div class="row-label">Lines</div>
-          <div id="lineCount" class="segmented" role="group" aria-label="Number of lines">
-            <button data-lines="2" class="active">2</button><button data-lines="3">3</button><button data-lines="4">4</button>
-          </div>
-          <div class="team-row">
-            <label>Horses / line
-              <select id="horsesPerLine">
-                <option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>10</option><option>12</option>
-              </select>
+          <div class="team-controls">
+            <label><span>Lines</span>
+              <div id="lineCount" class="segmented" role="group" aria-label="Number of lines">
+                <button data-lines="2" class="active">2</button><button data-lines="3">3</button><button data-lines="4">4</button>
+              </div>
             </label>
-            <label>Pace
-              <select id="pace">
-                <option value="smooth">Smooth</option><option value="show" selected>Show</option><option value="fast">Fast</option>
-              </select>
+            <label><span>Horses / line</span>
+              <select id="horsesPerLine"><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>10</option><option>12</option></select>
+            </label>
+            <label><span>Pace</span>
+              <select id="pace"><option value="smooth">Smooth</option><option value="show" selected>Show</option><option value="fast">Fast</option></select>
             </label>
           </div>
+          <div class="direction-note"><strong>Entrance:</strong> LEFT GATE → RIGHT</div>
         </section>
 
-        <section class="step step-build">
-          <div class="step-title"><b>2</b><span>Build the routine</span></div>
-          <button id="proBtn" class="pro-button"><span>MAKE A PRO ROUTINE</span><small>One tap builds the whole thing</small></button>
-          <div class="or-line"><span>or add moves</span></div>
+        <section class="step moves-step">
+          <div class="step-title"><b>2</b><span>Add the next move</span></div>
+          <div class="placement-help"><span class="target-mini">＋</span><div><strong>Tap the arena to choose where it goes.</strong><small>Circle, Figure 8, Split, Together and Cross use the gold target.</small></div></div>
           <div id="moveGrid" class="move-grid">
-            <button data-move="straight"><i>↑</i><span>Straight</span></button>
-            <button data-move="split"><i>↙↘</i><span>Split</span></button>
-            <button data-move="figure8"><i>∞</i><span>Figure 8</span></button>
-            <button data-move="weave"><i>⋈</i><span>Weave</span></button>
+            <button data-move="straight"><i>→</i><span>Straight</span></button>
+            <button data-move="split"><i>↗↘</i><span>Split</span></button>
+            <button data-move="curveUp"><i>↗</i><span>Curve Up</span></button>
+            <button data-move="curveDown"><i>↘</i><span>Curve Down</span></button>
+            <button data-move="together"><i>⇉</i><span>Together</span></button>
             <button data-move="circle"><i>○</i><span>Circle</span></button>
-            <button data-move="diamond"><i>◇</i><span>Diamond</span></button>
-            <button data-move="pinwheel"><i>✣</i><span>Pinwheel</span></button>
-            <button data-move="clover"><i>✤</i><span>Cloverleaf</span></button>
-            <button data-move="sweep"><i>∿</i><span>Sweep</span></button>
-            <button data-move="hold"><i>■</i><span>Stop / Salute</span></button>
-            <button data-move="finish" class="finish-move"><i>⌂</i><span>Finish</span></button>
+            <button data-move="figure8"><i>∞</i><span>Figure 8</span></button>
+            <button data-move="cross"><i>✕</i><span>Cross</span></button>
+            <button data-move="hold"><i>■</i><span>Stop</span></button>
+            <button data-move="finish" class="finish-move"><i>⇥</i><span>Finish / Exit</span></button>
+          </div>
+          <div class="special-actions">
+            <button id="drawBtn" class="draw-button">✎ Draw Next Move by Hand</button>
+            <button id="proBtn" class="pro-button"><span>Build a Full Routine for Me</span><small>Uses the same basic moves, left to right</small></button>
           </div>
         </section>
 
-        <section class="step step-order">
+        <section class="step order-step">
           <div class="step-title"><b>3</b><span>Routine order</span><em id="moveCount">0 moves</em></div>
-          <div id="routineList" class="routine-list"><div class="empty-list">Tap “Make a Pro Routine” or add moves above.</div></div>
+          <div id="routineList" class="routine-list"><div class="empty-list">Add a move above.</div></div>
           <div class="order-actions"><button id="undoBtn">Undo last</button><button id="clearBtn">Clear</button></div>
         </section>
       </aside>
 
       <section class="stage">
         <div class="stage-head">
-          <div><strong id="routineName">New Routine</strong><span id="teamSummary">2 lines · 6 horses each · synchronized</span></div>
+          <div><strong id="routineName">New Routine</strong><span id="teamSummary">2 lines · 6 horses each · LEFT → RIGHT</span></div>
           <div id="statusPill" class="status-pill">Ready</div>
         </div>
         <div class="arena-wrap">
@@ -85,12 +85,24 @@
             <rect x="40" y="40" width="920" height="480" rx="34" class="rail"/>
             <rect x="52" y="52" width="896" height="456" rx="27" class="dirt"/>
             <rect x="52" y="52" width="896" height="456" rx="27" fill="url(#grid)"/>
-            <g class="arena-marks"><line x1="500" y1="52" x2="500" y2="508"/><circle cx="500" cy="280" r="11"/><text x="500" y="82">NORTH END</text><text x="500" y="493">SOUTH CHUTE</text></g>
+            <g class="arena-marks">
+              <line x1="500" y1="52" x2="500" y2="508"/>
+              <circle cx="500" cy="280" r="11"/>
+              <text x="500" y="82">NORTH</text><text x="500" y="493">SOUTH</text>
+            </g>
+            <g class="gate-mark start-gate"><rect x="44" y="228" width="34" height="104" rx="8"/><text x="92" y="272">START</text><text x="92" y="291">LEFT GATE →</text></g>
+            <g class="gate-mark exit-gate"><rect x="922" y="228" width="34" height="104" rx="8"/><text x="908" y="281" text-anchor="end">EXIT</text></g>
             <g id="routeLayer"></g>
+            <g id="draftLayer"></g>
+            <g id="targetLayer"></g>
             <g id="horseLayer"></g>
+            <rect id="arenaSurface" x="52" y="52" width="896" height="456" rx="27" fill="transparent"/>
           </svg>
-          <div id="arenaEmpty" class="arena-empty"><strong>Start with one button.</strong><span>“Make a Pro Routine” creates a complete synchronized drill automatically.</span></div>
+          <div id="arenaEmpty" class="arena-empty"><strong>Start at the left gate.</strong><span>Tap <b>Straight</b> first, or use “Build a Full Routine for Me.”</span></div>
+          <div id="drawHint" class="draw-hint hidden"><strong>Draw the move with your finger.</strong><span>It starts from the gold dot. When you finish, choose Keep as Drawn or Smooth It.</span></div>
+          <div id="drawReview" class="draw-review hidden"><strong>Hand-drawn move ready</strong><button id="keepRawBtn">Keep as Drawn</button><button id="smoothBtn" class="smooth">Smooth It</button><button id="cancelDrawBtn">Cancel</button></div>
         </div>
+        <div class="placement-strip"><span>Gold target = next generated shape</span><strong id="targetText">Center</strong><button id="centerTargetBtn">Center target</button></div>
         <div class="playbar">
           <button id="playBtn" class="play-main">▶ <span>PLAY ROUTINE</span></button>
           <button id="restartBtn" class="play-small">↺</button>
