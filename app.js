@@ -1,96 +1,324 @@
 (() => {
 'use strict';
 const SVG='http://www.w3.org/2000/svg';
-const STORE='rodeo-simple-v2';
-const COLORS=['#f0b84e','#60a5fa','#ef6f6c','#65c18c'];
-const LABELS={straight:'Straight',split:'Split',curveUp:'Curve Up',curveDown:'Curve Down',together:'Together',circle:'Circle',figure8:'Figure 8',cross:'Cross',hold:'Stop',finish:'Finish / Exit',hand:'Hand Drawn',handSmooth:'Hand Drawn · Smoothed'};
-const els={};['lineCount','horsesPerLine','pace','proBtn','drawBtn','moveGrid','routineList','moveCount','undoBtn','clearBtn','newBtn','arena','arenaSurface','routeLayer','draftLayer','targetLayer','horseLayer','arenaEmpty','drawHint','drawReview','keepRawBtn','smoothBtn','cancelDrawBtn','centerTargetBtn','targetText','playBtn','restartBtn','timeline','timeLabel','durationLabel','routineName','teamSummary','statusPill','saveBtn','exportBtn','toast'].forEach(id=>els[id]=document.getElementById(id));
-let state={lines:2,horses:6,pace:'show',moves:[],name:'New Routine',playing:false,time:0,last:0,raf:0,routes:[],segments:[],duration:0,target:{x:560,y:280},drawMode:false,drawing:false,draft:[],pendingDraft:null};
-const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+const STORE='rodeo-draw-first-v1';
+const COLORS=['#e9b34b','#60a5fa','#ef7770','#69c38d'];
+const $=id=>document.getElementById(id);
+const els={};
+['lineCount','horsesPerLine','horseGap','pace','motionMode','drawBtn','holdBtn','exitBtn','polishBtn','undoBtn','newBtn','saveBtn','exportBtn','restartBtn','playBtn','routineName','teamSummary','statusPill','arena','arenaSurface','routeLayer','startLayer','draftLayer','horseLayer','emptyMessage','drawMessage','reviewBar','reviewHint','cleanupChoice','retryBtn','useBtn','timeline','timeLabel','durationLabel','stepCount','stepStrip','toast'].forEach(id=>els[id]=$(id));
+let state={
+lines:2,horses:6,gapFt:26,pace:'show',mode:'mirror',steps:[],name:'New Routine',
+time:0,duration:0,playing:false,last:0,raf:0,
+routes:[],segments:[],endpoints:[],
+drawing:false,pointerId:null,pointerStart:null,rawDelta:[],draftCleanup:'smooth',draftProcessed:[],
+};
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const dist=(a,b)=>Math.hypot(b.x-a.x,b.y-a.y);
-function slots(n){return n===2?[-.5,.5]:n===3?[-1,0,1]:[-1.5,-.5,.5,1.5];}
-function startPoint(slot){return{x:68,y:280+slot*54};}
+const clonePts=p=>p.map(q=>({x:q.x,y:q.y}));
+const slotValues=n=>n===1?[0]:n===2?[-.5,.5]:n===3?[-1,0,1]:[-1.5,-.5,.5,1.5];
+const laneGap=()=>state.lines===4?30:36;
+const startPositions=()=>slotValues(state.lines).map(s=>({x:120,y:280+s*laneGap()}));
+const speedPx=()=>state.pace==='walk'?72:state.pace==='fast'?118:94;
+const spacingPx=()=>state.gapFt*2.8;
+const horseHeadway=()=>spacingPx()/speedPx();
 function svgEl(tag,attrs={}){const e=document.createElementNS(SVG,tag);for(const[k,v]of Object.entries(attrs))e.setAttribute(k,String(v));return e;}
 function pathD(points){return points.map((p,i)=>(i?'L':'M')+` ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');}
-function pointDist(a,b){return Math.hypot(b.x-a.x,b.y-a.y)}
-function linePoints(a,b,steps=14){const out=[];for(let i=0;i<=steps;i++){const t=i/steps;out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}return out;}
-function catmull(anchors,steps=8){const a=anchors.map(p=>Array.isArray(p)?{x:p[0],y:p[1]}:{...p}),out=[];if(a.length<2)return a;for(let i=0;i<a.length-1;i++){const p0=a[Math.max(0,i-1)],p1=a[i],p2=a[i+1],p3=a[Math.min(a.length-1,i+2)];for(let s=0;s<(i===a.length-2?steps+1:steps);s++){const t=s/steps,t2=t*t,t3=t2*t;out.push({x:.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),y:.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)});}}return out.map(p=>({x:clamp(p.x,58,942),y:clamp(p.y,58,502)}));}
-function circlePoints(cx,cy,rx,ry,start=0,steps=56){const out=[];for(let i=0;i<=steps;i++){const t=start+i/steps*Math.PI*2;out.push({x:cx+Math.cos(t)*rx,y:cy+Math.sin(t)*ry});}return out;}
-function figureEight(cx,cy,rx,ry,flip=1,steps=84){const out=[];for(let i=0;i<=steps;i++){const t=i/steps*Math.PI*2;out.push({x:cx+flip*rx*Math.sin(t),y:cy+ry*Math.sin(2*t)});}return out;}
-function chaikin(points,passes=3){let out=points.map(p=>({...p}));for(let pass=0;pass<passes;pass++){if(out.length<3)break;const next=[out[0]];for(let i=0;i<out.length-1;i++){const a=out[i],b=out[i+1];next.push({x:a.x*.75+b.x*.25,y:a.y*.75+b.y*.25},{x:a.x*.25+b.x*.75,y:a.y*.25+b.y*.75});}next.push(out[out.length-1]);out=next;}return out;}
-function segmentMeta(points,type='move'){let cum=[0],total=0;for(let i=1;i<points.length;i++){total+=pointDist(points[i-1],points[i]);cum.push(total);}return{points,cum,total,type};}
-function pointOn(seg,p){if(seg.type==='hold')return{...seg.points[0],angle:0};const d=clamp(p,0,1)*seg.total;if(!seg.total)return{...seg.points[0],angle:0};let i=1;while(i<seg.cum.length&&seg.cum[i]<d)i++;i=Math.min(i,seg.points.length-1);const a=seg.points[i-1],b=seg.points[i],base=seg.cum[i-1],len=Math.max(.001,seg.cum[i]-base),t=(d-base)/len;return{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,angle:Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI};}
-function moveSeconds(move){if(move.type==='hold')return 2.2;if(move.type==='figure8'||move.type==='circle'||move.type==='cross')return state.pace==='fast'?5.1:state.pace==='smooth'?7.0:6.0;if(move.type==='hand'||move.type==='handSmooth')return state.pace==='fast'?4.8:state.pace==='smooth'?6.4:5.5;return state.pace==='fast'?3.9:state.pace==='smooth'?5.5:4.6;}
-function horseGap(){return state.pace==='fast'?1.0:state.pace==='smooth'?1.45:1.25;}
-function connect(current,pts){if(!pts.length)return[{...current}];if(dist(current,pts[0])<2)return pts;return catmull([[current.x,current.y],[(current.x+pts[0].x)/2,(current.y+pts[0].y)/2],[pts[0].x,pts[0].y]],6).concat(pts.slice(1));}
-function createManeuver(move,current,slot,lineIndex){const type=move.type,t=move.target||state.target,side=slot===0?(lineIndex%2?1:-1):Math.sign(slot)||1;let pts=[];
-  if(type==='straight'){
-    const tx=clamp(Math.max(current.x+150,t.x),120,915);pts=linePoints(current,{x:tx,y:current.y},18);
-  } else if(type==='curveUp'||type==='curveDown'){
-    const dir=type==='curveUp'?-1:1,tx=clamp(Math.max(current.x+150,t.x),150,890),ty=clamp(t.y+dir*95,90,470);pts=catmull([[current.x,current.y],[current.x+85,current.y],[tx-70,ty],[tx,ty]],10);
-  } else if(type==='split'){
-    const tx=clamp(Math.max(current.x+135,t.x),160,885),spread=state.lines===4?62:78,ty=clamp(t.y+slot*spread,95,465);pts=catmull([[current.x,current.y],[current.x+70,current.y],[tx-55,ty],[tx,ty]],9);
-  } else if(type==='together'){
-    const tx=clamp(Math.max(current.x+125,t.x),160,890),ty=clamp(t.y+slot*24,100,460);pts=catmull([[current.x,current.y],[current.x+60,current.y],[tx-55,ty],[tx,ty]],9);
-  } else if(type==='circle'){
-    const cx=clamp(t.x+slot*72,150,850),cy=clamp(t.y,135,425),rx=72,ry=58,start=Math.PI;const loop=circlePoints(cx,cy,rx,ry,start,60);pts=connect(current,loop);
-  } else if(type==='figure8'){
-    const cx=clamp(t.x,210,790),cy=clamp(t.y+slot*34,145,415),loop=figureEight(cx,cy,125,65,side,88);pts=connect(current,loop);
-  } else if(type==='cross'){
-    const cx=clamp(t.x,210,790),cy=clamp(t.y,140,420),sy=slot*74;const endY=cy-sy;pts=catmull([[current.x,current.y],[cx-115,current.y],[cx,cy],[cx+125,endY]],10);
-  } else if(type==='hold'){
-    pts=[{...current},{...current}];
-  } else if(type==='finish'){
-    const ty=clamp(280+slot*46,120,440);pts=catmull([[current.x,current.y],[Math.max(current.x+95,760),(current.y+ty)/2],[930,ty]],11);
-  } else if(type==='hand'||type==='handSmooth'){
-    const raw=move.points||[];if(raw.length<2)return[{...current},{...current}];const base=raw[0];pts=raw.map(p=>({x:clamp(current.x+(p.x-base.x),58,942),y:clamp(current.y+(p.y-base.y),58,502)}));
-  }
-  return pts;
+function linePoints(a,b,steps=12){const out=[];for(let i=0;i<=steps;i++){const t=i/steps;out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});}return out;}
+function pathLength(points){let n=0;for(let i=1;i<points.length;i++)n+=dist(points[i-1],points[i]);return n;}
+function segmentMeta(points,type='move',hold=0){const cum=[0];let total=0;for(let i=1;i<points.length;i++){total+=dist(points[i-1],points[i]);cum.push(total);}return{points,cum,total,type,hold};}
+function pointOn(seg,t){
+if(seg.type==='hold')return{...seg.points[0],angle:0};
+if(seg.total<.001)return{...seg.points[0],angle:0};
+const d=clamp(t,0,1)*seg.total;let i=1;while(i<seg.cum.length&&seg.cum[i]<d)i++;i=Math.min(i,seg.points.length-1);
+const a=seg.points[i-1],b=seg.points[i],base=seg.cum[i-1],len=Math.max(.001,seg.cum[i]-base),u=(d-base)/len;
+return{x:a.x+(b.x-a.x)*u,y:a.y+(b.y-a.y)*u,angle:Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI};
 }
-function buildRoutes(){const ss=slots(state.lines);state.routes=[];state.segments=[];for(let li=0;li<state.lines;li++){let current=startPoint(ss[li]),all=[{...current}],segs=[];for(const move of state.moves){let pts=createManeuver(move,current,ss[li],li);if(pts.length&&dist(current,pts[0])>1)pts=connect(current,pts);const seg=segmentMeta(pts,move.type==='hold'?'hold':'move');segs.push(seg);all.push(...pts.slice(1));current=pts[pts.length-1]||current;}state.routes.push(all);state.segments.push(segs);}let total=0;for(const m of state.moves)total+=moveSeconds(m);state.duration=total+(state.horses-1)*horseGap()+1.0;state.time=clamp(state.time,0,state.duration||0);}
-function segmentAtTime(time){let elapsed=0;for(let i=0;i<state.moves.length;i++){const d=moveSeconds(state.moves[i]);if(time<=elapsed+d)return{i,local:(time-elapsed)/d};elapsed+=d;}return null;}
-function routePose(lineIndex,time,horseIndex){if(!state.moves.length)return null;const linePhase=lineIndex*(horseGap()/Math.max(2,state.lines))*0.45;const t=time-linePhase-horseIndex*horseGap();if(t<0)return null;const hit=segmentAtTime(t);if(!hit)return null;return pointOn(state.segments[lineIndex][hit.i],hit.local);}
-function renderRoutes(){els.routeLayer.replaceChildren();state.routes.forEach((pts,i)=>{if(pts.length<2)return;els.routeLayer.appendChild(svgEl('path',{d:pathD(pts),class:'route-shadow'}));els.routeLayer.appendChild(svgEl('path',{d:pathD(pts),class:'route-path',stroke:COLORS[i]}));});}
-function renderTarget(){els.targetLayer.replaceChildren();if(state.drawMode)return;const t=state.target;els.targetLayer.appendChild(svgEl('circle',{cx:t.x,cy:t.y,r:18,class:'target-ring'}));els.targetLayer.appendChild(svgEl('line',{x1:t.x-10,y1:t.y,x2:t.x+10,y2:t.y,class:'target-cross'}));els.targetLayer.appendChild(svgEl('line',{x1:t.x,y1:t.y-10,x2:t.x,y2:t.y+10,class:'target-cross'}));const label=svgEl('text',{x:t.x,y:t.y-25,class:'target-label'});label.textContent='NEXT MOVE';els.targetLayer.appendChild(label);els.targetText.textContent=`x ${Math.round(t.x)} · y ${Math.round(t.y)}`;}
-function renderDraft(){els.draftLayer.replaceChildren();const pts=state.pendingDraft||state.draft;if(pts?.length>1)els.draftLayer.appendChild(svgEl('path',{d:pathD(pts),class:'draft-path'}));}
-function renderHorses(){els.horseLayer.replaceChildren();for(let li=0;li<state.lines;li++){for(let h=0;h<state.horses;h++){const p=routePose(li,state.time,h);if(!p)continue;const g=svgEl('g',{class:'horse',transform:`translate(${p.x} ${p.y}) rotate(${p.angle+90})`});const body=svgEl('ellipse',{cx:0,cy:0,rx:7.5,ry:11,fill:COLORS[li],class:'horse-body'});const head=svgEl('circle',{cx:0,cy:-12,r:3.8,class:'horse-head'});const txt=svgEl('text',{x:0,y:.5,class:'horse-num'});txt.textContent=h+1;g.append(body,head,txt);els.horseLayer.appendChild(g);}}}
-function movePlace(move){if(['circle','figure8','split','together','cross'].includes(move.type)&&move.target)return` @ ${Math.round(move.target.x)},${Math.round(move.target.y)}`;return'';}
-function renderList(){els.routineList.replaceChildren();if(!state.moves.length)els.routineList.innerHTML='<div class="empty-list">Add a move above.</div>';else state.moves.slice(0,10).forEach((m,i)=>{const row=document.createElement('div');row.className='move-row';row.title=LABELS[m.type]+movePlace(m);row.innerHTML=`<b>${i+1}</b><span>${LABELS[m.type]}</span>`;els.routineList.appendChild(row);});els.moveCount.textContent=`${state.moves.length} move${state.moves.length===1?'':'s'}`;}
-function renderUi(){buildRoutes();renderRoutes();renderTarget();renderDraft();renderHorses();renderList();els.arenaEmpty.classList.toggle('hidden',state.moves.length>0||state.drawMode);els.routineName.textContent=state.name;els.teamSummary.textContent=`${state.lines} lines · ${state.horses} horses each · LEFT → RIGHT · wider spacing`;els.statusPill.textContent=state.drawMode?'Drawing':state.moves.length?'Synchronized':'Ready';els.timeline.max=Math.max(.01,state.duration);els.timeline.value=state.time;els.timeLabel.textContent=formatTime(state.time);els.durationLabel.textContent=formatTime(state.duration);document.querySelectorAll('#lineCount button').forEach(b=>b.classList.toggle('active',Number(b.dataset.lines)===state.lines));els.horsesPerLine.value=state.horses;els.pace.value=state.pace;els.playBtn.innerHTML=state.playing?'❚❚ <span>PAUSE</span>':'▶ <span>PLAY ROUTINE</span>';}
 function formatTime(s){s=Math.max(0,s||0);return`${Math.floor(s/60)}:${Math.floor(s%60).toString().padStart(2,'0')}`;}
-function toast(msg){els.toast.textContent=msg;els.toast.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>els.toast.classList.remove('show'),1900);}
+function resample(points,spacing=10){
+if(points.length<2)return clonePts(points);
+const out=[{...points[0]}];let carry=0;
+for(let i=1;i<points.length;i++){
+let a={...points[i-1]},b=points[i],seg=dist(a,b);
+if(seg<.01)continue;
+while(carry+seg>=spacing){
+const t=(spacing-carry)/seg;
+a={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};
+out.push({...a});seg=dist(a,b);carry=0;
+}
+carry+=seg;
+}
+const last=points[points.length-1];
+if(dist(out[out.length-1],last)>2)out.push({...last});
+return out;
+}
+function rdp(points,epsilon=5){
+if(points.length<3)return clonePts(points);
+const first=points[0],last=points[points.length-1];
+const dx=last.x-first.x,dy=last.y-first.y,den=Math.max(.001,Math.hypot(dx,dy));
+let max=0,index=0;
+for(let i=1;i<points.length-1;i++){
+const p=points[i],d=Math.abs(dy*p.x-dx*p.y+last.x*first.y-last.y*first.x)/den;
+if(d>max){max=d;index=i;}
+}
+if(max>epsilon){
+const left=rdp(points.slice(0,index+1),epsilon),right=rdp(points.slice(index),epsilon);
+return left.slice(0,-1).concat(right);
+}
+return[{...first},{...last}];
+}
+function catmull(points,steps=6){
+if(points.length<3)return clonePts(points);
+const out=[];
+for(let i=0;i<points.length-1;i++){
+const p0=points[Math.max(0,i-1)],p1=points[i],p2=points[i+1],p3=points[Math.min(points.length-1,i+2)];
+for(let s=0;s<(i===points.length-2?steps+1:steps);s++){
+const t=s/steps,t2=t*t,t3=t2*t;
+out.push({
+x:.5*((2*p1.x)+(-p0.x+p2.x)*t+(2*p0.x-5*p1.x+4*p2.x-p3.x)*t2+(-p0.x+3*p1.x-3*p2.x+p3.x)*t3),
+y:.5*((2*p1.y)+(-p0.y+p2.y)*t+(2*p0.y-5*p1.y+4*p2.y-p3.y)*t2+(-p0.y+3*p1.y-3*p2.y+p3.y)*t3)
+});
+}
+}
+out[0]={...points[0]};out[out.length-1]={...points[points.length-1]};
+return out;
+}
+function lineDeviation(points){
+if(points.length<3)return 0;
+const a=points[0],b=points[points.length-1],dx=b.x-a.x,dy=b.y-a.y,den=Math.max(.001,Math.hypot(dx,dy));
+let sum=0,max=0;
+for(const p of points){const d=Math.abs(dy*p.x-dx*p.y+b.x*a.y-b.y*a.x)/den;sum+=d;max=Math.max(max,d);}
+return{avg:sum/points.length,max};
+}
+function smoothDelta(raw){
+if(raw.length<2)return clonePts(raw);
+const sampled=resample(raw,9);
+const simplified=rdp(sampled,5.5);
+if(simplified.length===2)return linePoints(simplified[0],simplified[1],16);
+return catmull(simplified,7);
+}
+function smartPolish(raw){
+if(raw.length<2)return clonePts(raw);
+const dev=lineDeviation(raw),chord=dist(raw[0],raw[raw.length-1]),length=pathLength(raw);
+if(chord>70 && dev.max<15 && length/chord<1.10)return linePoints(raw[0],raw[raw.length-1],18);
+return smoothDelta(raw);
+}
+function processedDraft(){
+if(state.draftCleanup==='raw')return clonePts(state.rawDelta);
+if(state.draftCleanup==='straight'){
+const end=state.rawDelta[state.rawDelta.length-1]||{x:120,y:0};
+return linePoints({x:0,y:0},end,18);
+}
+return smoothDelta(state.rawDelta);
+}
+function transformDelta(delta,current,lineIndex,mode){
+if(mode==='together'){
+return delta.map(p=>({x:clamp(current.x+p.x,58,942),y:clamp(current.y+p.y,58,502)}));
+}
+const slots=slotValues(state.lines),slot=slots[lineIndex];
+const sign=slot<0?1:slot>0?-1:0;
+const strength=slot===0?0:1;
+return delta.map(p=>({x:clamp(current.x+p.x,58,942),y:clamp(current.y+p.y*sign*strength,58,502)}));
+}
+function buildRoutes(){
+const starts=startPositions();
+state.routes=[];state.segments=[];state.endpoints=[];
+let totalDuration=0;
+for(let li=0;li<state.lines;li++){
+const entryStart={x:48,y:starts[li].y},entryEnd={...starts[li]};
+let current={...entryEnd},route=linePoints(entryStart,entryEnd,10),segs=[segmentMeta(route,'entry')];
+for(const step of state.steps){
+if(step.type==='draw'){
+const pts=transformDelta(step.points,current,li,step.mode);
+if(pts.length && dist(current,pts[0])>1)pts.unshift({...current});
+const seg=segmentMeta(pts,'move');segs.push(seg);route.push(...pts.slice(1));current=pts[pts.length-1]||current;
+}else if(step.type==='hold'){
+const pts=[{...current},{...current}];segs.push(segmentMeta(pts,'hold',step.seconds));route.push({...current});
+}else if(step.type==='exit'){
+const target={x:948,y:current.y},pts=linePoints(current,target,16);segs.push(segmentMeta(pts,'exit'));route.push(...pts.slice(1));current=target;
+}
+}
+state.routes.push(route);state.segments.push(segs);state.endpoints.push(current);
+}
+const segs=state.segments[0]||[];
+totalDuration=segs.reduce((sum,s)=>sum+(s.type==='hold'?s.hold:Math.max(.55,s.total/speedPx())),0);
+state.duration=totalDuration+(state.horses-1)*horseHeadway()+1;
+state.time=clamp(state.time,0,state.duration||0);
+}
+function linePhase(lineIndex){
+if(state.lines<=1)return 0;
+return (lineIndex%2)*horseHeadway()*.5 + Math.floor(lineIndex/2)*horseHeadway()*.12;
+}
+function routePose(lineIndex,time,horseIndex){
+const t=time-horseIndex*horseHeadway()-linePhase(lineIndex);
+if(t<0)return null;
+const segs=state.segments[lineIndex]||[];
+let cursor=0;
+for(const seg of segs){
+const dur=seg.type==='hold'?seg.hold:Math.max(.55,seg.total/speedPx());
+if(t<=cursor+dur){
+const u=dur?((t-cursor)/dur):1;
+return pointOn(seg,u);
+}
+cursor+=dur;
+}
+return null;
+}
+function renderRoutes(){
+els.routeLayer.replaceChildren();
+state.routes.forEach((pts,i)=>{
+if(pts.length<2)return;
+els.routeLayer.appendChild(svgEl('path',{d:pathD(pts),class:'route-shadow'}));
+els.routeLayer.appendChild(svgEl('path',{d:pathD(pts),class:'route-path',stroke:COLORS[i]}));
+});
+}
+function renderStartDots(){
+els.startLayer.replaceChildren();
+const points=state.endpoints.length?state.endpoints:startPositions();
+points.forEach((p,i)=>{
+const c=svgEl('circle',{cx:p.x,cy:p.y,r:6,fill:COLORS[i],class:'current-dot'});els.startLayer.appendChild(c);
+});
+if(state.drawing && points[0]){
+const t=svgEl('text',{x:points[0].x+10,y:points[0].y-10,class:'current-label'});t.textContent='NEXT START';els.startLayer.appendChild(t);
+}
+}
+function renderDraft(){
+els.draftLayer.replaceChildren();
+if(!state.rawDelta.length)return;
+const pts=processedDraft();state.draftProcessed=pts;
+const currents=state.endpoints.length?state.endpoints:startPositions();
+currents.forEach((cur,li)=>{
+const transformed=transformDelta(pts,cur,li,state.mode);
+els.draftLayer.appendChild(svgEl('path',{d:pathD(transformed),class:'draft-copy',stroke:COLORS[li]}));
+});
+}
+function renderHorses(){
+els.horseLayer.replaceChildren();
+for(let li=0;li<state.lines;li++){
+for(let h=0;h<state.horses;h++){
+const p=routePose(li,state.time,h);if(!p)continue;
+const g=svgEl('g',{class:'horse',transform:`translate(${p.x} ${p.y}) rotate(${p.angle+90})`});
+const body=svgEl('ellipse',{cx:0,cy:0,rx:7.2,ry:10.5,fill:COLORS[li],class:'horse-body'});
+const head=svgEl('circle',{cx:0,cy:-11.8,r:3.6,class:'horse-head'});
+const txt=svgEl('text',{x:0,y:.5,class:'horse-num'});txt.textContent=h+1;
+g.append(body,head,txt);els.horseLayer.appendChild(g);
+}
+}
+}
+function renderSteps(){
+els.stepStrip.replaceChildren();
+if(!state.steps.length){
+const e=document.createElement('div');e.className='empty-step';e.textContent='Your movements will appear here in order.';els.stepStrip.appendChild(e);
+}else{
+state.steps.forEach((s,i)=>{
+const card=document.createElement('div');card.className='step-card'+(s.polished?' polished':'');
+const title=s.type==='draw'?(s.mode==='mirror'?'Mirrored movement':'Together movement'):s.type==='hold'?'5-sec stop':'Exit right';
+const sub=s.type==='draw'?(s.style==='raw'?'kept as drawn':s.style==='straight'?'perfect straight':'smoothed'):(s.type==='hold'?'all horses hold':'finish');
+card.innerHTML=`<b>${i+1}. ${title}</b><span>${sub}</span><button data-remove="${i}" aria-label="Remove movement">×</button>`;
+els.stepStrip.appendChild(card);
+});
+}
+els.stepCount.textContent=`${state.steps.length} movement${state.steps.length===1?'':'s'}`;
+}
+function renderUI(){
+buildRoutes();renderRoutes();renderStartDots();renderHorses();renderSteps();
+els.emptyMessage.classList.toggle('hidden',state.steps.length>0||state.drawing||state.rawDelta.length>0);
+els.teamSummary.textContent=`${state.lines} line${state.lines===1?'':'s'} · ${state.horses} horses each · ${state.gapFt} ft gap · enters LEFT gate`;
+els.statusPill.textContent=state.drawing?'Drawing…':state.rawDelta.length?'Review movement':state.steps.length?'Ready to play':'Ready to draw';
+els.timeline.max=Math.max(.01,state.duration);els.timeline.value=state.time;els.timeLabel.textContent=formatTime(state.time);els.durationLabel.textContent=formatTime(state.duration);
+document.querySelectorAll('#lineCount [data-lines]').forEach(b=>b.classList.toggle('active',Number(b.dataset.lines)===state.lines));
+document.querySelectorAll('#motionMode [data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===state.mode));
+els.horsesPerLine.value=state.horses;els.horseGap.value=state.gapFt;els.pace.value=state.pace;
+els.playBtn.innerHTML=state.playing?'❚❚ <span>PAUSE</span>':'▶ <span>PLAY</span>';
+}
+function toast(msg){els.toast.textContent=msg;els.toast.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>els.toast.classList.remove('show'),1600);}
 function stop(){state.playing=false;if(state.raf)cancelAnimationFrame(state.raf);state.raf=0;}
-function play(){if(state.drawMode||state.pendingDraft){toast('Finish the hand-drawn move first');return;}if(!state.moves.length){toast('Add a move first');return;}if(state.playing){stop();renderUi();return;}if(state.time>=state.duration-.05)state.time=0;state.playing=true;state.last=performance.now();tick(state.last);}
-function tick(now){if(!state.playing)return;state.time+=(now-state.last)/1000;state.last=now;if(state.time>=state.duration){state.time=state.duration;stop();}renderHorses();els.timeline.value=state.time;els.timeLabel.textContent=formatTime(state.time);els.playBtn.innerHTML=state.playing?'❚❚ <span>PAUSE</span>':'▶ <span>PLAY ROUTINE</span>';if(state.playing)state.raf=requestAnimationFrame(tick);}
-function addMove(type){stop();if(state.drawMode||state.pendingDraft){toast('Finish or cancel the hand-drawn move first');return;}if(state.moves.length>=10){toast('Routine is full — undo a move first');return;}const move={type};if(['straight','circle','figure8','split','together','cross','curveUp','curveDown'].includes(type))move.target={...state.target};state.moves.push(move);state.name='My Routine';state.time=0;renderUi();toast(`${LABELS[type]} added`);}
-function proRoutine(){stop();cancelDrawing(false);state.moves=[
-  {type:'straight',target:{x:255,y:280}},
-  {type:'split',target:{x:365,y:280}},
-  {type:'circle',target:{x:470,y:280}},
-  {type:'together',target:{x:570,y:280}},
-  {type:'figure8',target:{x:675,y:280}},
-  {type:'cross',target:{x:790,y:280}},
-  {type:'finish',target:{x:900,y:280}}
-];state.name='Professional Left-to-Right Routine';state.time=0;state.target={x:675,y:280};renderUi();toast('Full synchronized routine built left to right');}
-function reset(){stop();cancelDrawing(false);state.moves=[];state.name='New Routine';state.time=0;state.target={x:560,y:280};renderUi();}
-function save(){const data={version:2,lines:state.lines,horses:state.horses,pace:state.pace,moves:state.moves,name:state.name,target:state.target};localStorage.setItem(STORE,JSON.stringify(data));toast('Routine saved on this device');}
-function load(){try{const d=JSON.parse(localStorage.getItem(STORE)||'null');if(!d)return;Object.assign(state,{lines:d.lines||2,horses:d.horses||6,pace:d.pace||'show',moves:Array.isArray(d.moves)?d.moves:[],name:d.name||'Saved Routine',target:d.target||{x:560,y:280}});}catch{}}
-function exportRoutine(){const blob=new Blob([JSON.stringify({version:2,name:state.name,entrance:'left-to-right',lines:state.lines,horsesPerLine:state.horses,pace:state.pace,moves:state.moves},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='rodeo-routine.json';a.click();URL.revokeObjectURL(url);toast('Routine exported');}
-function arenaPoint(e){const p=els.arena.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const m=els.arena.getScreenCTM();if(!m)return null;const q=p.matrixTransform(m.inverse());return{x:clamp(q.x,58,942),y:clamp(q.y,58,502)};}
-function masterEnd(){buildRoutes();return state.routes[0]?.[state.routes[0].length-1]||startPoint(slots(state.lines)[0]);}
-function beginDrawing(){stop();if(state.pendingDraft){toast('Choose Keep, Smooth, or Cancel first');return;}state.drawMode=true;state.drawing=false;state.draft=[];els.drawHint.classList.remove('hidden');els.drawReview.classList.add('hidden');renderUi();toast('Draw the next move on the arena');}
-function cancelDrawing(render=true){state.drawMode=false;state.drawing=false;state.draft=[];state.pendingDraft=null;els.drawHint?.classList.add('hidden');els.drawReview?.classList.add('hidden');if(render)renderUi();}
-function onArenaDown(e){e.preventDefault();const p=arenaPoint(e);if(!p)return;if(!state.drawMode){state.target=p;renderTarget();toast('Next shape location moved');return;}state.drawing=true;els.arenaSurface.setPointerCapture?.(e.pointerId);const start=masterEnd();state.draft=[{...start}];if(dist(start,p)>3)state.draft.push(p);renderDraft();}
-function onArenaMove(e){if(!state.drawMode||!state.drawing)return;e.preventDefault();const p=arenaPoint(e);if(!p)return;const last=state.draft[state.draft.length-1];if(!last||dist(last,p)>=4){state.draft.push(p);renderDraft();}}
-function onArenaUp(e){if(!state.drawMode||!state.drawing)return;e.preventDefault();state.drawing=false;if(state.draft.length<3||state.draft.slice(1).reduce((s,p,i)=>s+dist(state.draft[i],p),0)<28){toast('Draw a longer path');state.draft=[];renderDraft();return;}state.pendingDraft=state.draft.map(p=>({...p}));state.draft=[];state.drawMode=false;els.drawHint.classList.add('hidden');els.drawReview.classList.remove('hidden');renderDraft();els.statusPill.textContent='Review drawing';}
-function commitDraft(smooth){if(!state.pendingDraft)return;let points=state.pendingDraft.map(p=>({...p}));if(smooth)points=chaikin(points,3);state.moves.push({type:smooth?'handSmooth':'hand',points});state.pendingDraft=null;els.drawReview.classList.add('hidden');state.name='My Routine';state.time=0;renderUi();toast(smooth?'Hand-drawn move smoothed and added':'Hand-drawn move kept as drawn');}
-els.lineCount.addEventListener('click',e=>{const b=e.target.closest('[data-lines]');if(!b)return;stop();state.lines=Number(b.dataset.lines);state.time=0;renderUi();});
-els.horsesPerLine.addEventListener('change',()=>{stop();state.horses=Number(els.horsesPerLine.value);state.time=0;renderUi();});
-els.pace.addEventListener('change',()=>{stop();state.pace=els.pace.value;state.time=0;renderUi();});
-els.moveGrid.addEventListener('click',e=>{const b=e.target.closest('[data-move]');if(b)addMove(b.dataset.move);});
-els.proBtn.addEventListener('click',proRoutine);els.drawBtn.addEventListener('click',beginDrawing);els.keepRawBtn.addEventListener('click',()=>commitDraft(false));els.smoothBtn.addEventListener('click',()=>commitDraft(true));els.cancelDrawBtn.addEventListener('click',()=>cancelDrawing(true));
-els.arenaSurface.addEventListener('pointerdown',onArenaDown);els.arenaSurface.addEventListener('pointermove',onArenaMove);els.arenaSurface.addEventListener('pointerup',onArenaUp);els.arenaSurface.addEventListener('pointercancel',onArenaUp);
-els.centerTargetBtn.addEventListener('click',()=>{state.target={x:560,y:280};renderTarget();});
-els.undoBtn.addEventListener('click',()=>{stop();if(state.moves.length){state.moves.pop();state.time=0;renderUi();}});els.clearBtn.addEventListener('click',reset);els.newBtn.addEventListener('click',reset);els.playBtn.addEventListener('click',play);els.restartBtn.addEventListener('click',()=>{stop();state.time=0;renderUi();});els.timeline.addEventListener('input',()=>{stop();state.time=Number(els.timeline.value)||0;renderHorses();els.timeLabel.textContent=formatTime(state.time);});els.saveBtn.addEventListener('click',save);els.exportBtn.addEventListener('click',exportRoutine);
-load();renderUi();
+function play(){
+if(!state.steps.length){toast('Draw at least one movement first');return;}
+if(state.playing){stop();renderUI();return;}
+if(state.time>=state.duration-.05)state.time=0;
+state.playing=true;state.last=performance.now();tick(state.last);
+}
+function tick(now){
+if(!state.playing)return;
+state.time+=(now-state.last)/1000;state.last=now;
+if(state.time>=state.duration){state.time=state.duration;stop();}
+renderHorses();els.timeline.value=state.time;els.timeLabel.textContent=formatTime(state.time);els.playBtn.innerHTML=state.playing?'❚❚ <span>PAUSE</span>':'▶ <span>PLAY</span>';
+if(state.playing)state.raf=requestAnimationFrame(tick);
+}
+function arenaPoint(evt){
+const r=els.arena.getBoundingClientRect();
+return{x:(evt.clientX-r.left)/r.width*1000,y:(evt.clientY-r.top)/r.height*560};
+}
+function beginDraw(){
+stop();state.drawing=true;state.rawDelta=[];state.pointerStart=null;state.draftCleanup='smooth';state.time=0;
+els.drawBtn.classList.add('active');els.drawMessage.classList.remove('hidden');els.reviewBar.classList.add('hidden');
+els.cleanupChoice.querySelectorAll('button').forEach(b=>b.classList.toggle('active',b.dataset.cleanup==='smooth'));
+renderUI();
+}
+function cancelDraft(){
+state.drawing=false;state.rawDelta=[];state.pointerStart=null;state.pointerId=null;state.draftProcessed=[];
+els.drawBtn.classList.remove('active');els.drawMessage.classList.add('hidden');els.reviewBar.classList.add('hidden');renderUI();
+}
+function finishStroke(){
+if(state.rawDelta.length<2 || pathLength(state.rawDelta)<18){cancelDraft();toast('Draw a little farther');return;}
+state.drawing=false;state.draftCleanup='smooth';els.drawBtn.classList.remove('active');els.drawMessage.classList.add('hidden');els.reviewBar.classList.remove('hidden');renderDraft();renderStartDots();els.statusPill.textContent='Review movement';
+}
+function useDraft(){
+if(state.rawDelta.length<2)return;
+const pts=processedDraft();
+state.steps.push({type:'draw',mode:state.mode,points:pts,style:state.draftCleanup,polished:state.draftCleanup!=='raw'});
+state.name='My Rodeo Routine';els.routineName.textContent=state.name;
+state.rawDelta=[];state.draftProcessed=[];els.reviewBar.classList.add('hidden');state.time=0;renderUI();toast('Movement added');
+}
+function polishWhole(){
+stop();let changed=0;
+state.steps=state.steps.map(s=>{
+if(s.type!=='draw')return s;
+const polished=smartPolish(s.points);
+changed++;return{...s,points:polished,style:(lineDeviation(polished).max<2?'straight':'smooth'),polished:true};
+});
+state.time=0;renderUI();toast(changed?`Polished ${changed} movement${changed===1?'':'s'}`:'Nothing to polish yet');
+}
+function addHold(){stop();state.steps.push({type:'hold',seconds:5});state.time=0;renderUI();toast('5-second stop added');}
+function addExit(){stop();if(state.steps.some(s=>s.type==='exit')){toast('Exit is already in the routine');return;}state.steps.push({type:'exit'});state.time=0;renderUI();toast('Exit added');}
+function reset(){stop();state.steps=[];state.name='New Routine';els.routineName.textContent=state.name;state.time=0;cancelDraft();renderUI();}
+function save(){
+const data={version:1,lines:state.lines,horses:state.horses,gapFt:state.gapFt,pace:state.pace,mode:state.mode,steps:state.steps,name:state.name};
+localStorage.setItem(STORE,JSON.stringify(data));toast('Routine saved on this device');
+}
+function load(){
+try{
+const d=JSON.parse(localStorage.getItem(STORE)||'null');if(!d)return;
+state.lines=clamp(Number(d.lines)||2,1,4);state.horses=Number(d.horses)||6;state.gapFt=Number(d.gapFt)||26;state.pace=d.pace||'show';state.mode=d.mode||'mirror';
+state.steps=Array.isArray(d.steps)?d.steps:[];state.name=d.name||'Saved Routine';els.routineName.textContent=state.name;
+}catch{}
+}
+function exportRoutine(){
+const data={version:1,name:state.name,lines:state.lines,horsesPerLine:state.horses,horseGapFt:state.gapFt,pace:state.pace,steps:state.steps};
+const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+a.href=url;a.download='rodeo-routine.json';a.click();URL.revokeObjectURL(url);toast('Routine exported');
+}
+els.lineCount.addEventListener('click',e=>{const b=e.target.closest('[data-lines]');if(!b)return;stop();state.lines=Number(b.dataset.lines);if(state.lines===1)state.mode='together';state.time=0;renderUI();});
+els.motionMode.addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(!b)return;if(state.lines===1&&b.dataset.mode==='mirror'){toast('Mirror needs at least 2 lines');return;}state.mode=b.dataset.mode;renderUI();});
+els.horsesPerLine.addEventListener('change',()=>{stop();state.horses=Number(els.horsesPerLine.value);state.time=0;renderUI();});
+els.horseGap.addEventListener('change',()=>{stop();state.gapFt=Number(els.horseGap.value);state.time=0;renderUI();});
+els.pace.addEventListener('change',()=>{stop();state.pace=els.pace.value;state.time=0;renderUI();});
+els.drawBtn.addEventListener('click',()=>state.drawing?cancelDraft():beginDraw());
+els.holdBtn.addEventListener('click',addHold);els.exitBtn.addEventListener('click',addExit);els.polishBtn.addEventListener('click',polishWhole);
+els.undoBtn.addEventListener('click',()=>{stop();if(state.steps.length){state.steps.pop();state.time=0;renderUI();}});
+els.newBtn.addEventListener('click',reset);els.saveBtn.addEventListener('click',save);els.exportBtn.addEventListener('click',exportRoutine);
+els.restartBtn.addEventListener('click',()=>{stop();state.time=0;renderUI();});els.playBtn.addEventListener('click',play);
+els.timeline.addEventListener('input',()=>{stop();state.time=Number(els.timeline.value)||0;renderHorses();els.timeLabel.textContent=formatTime(state.time);});
+els.stepStrip.addEventListener('click',e=>{const b=e.target.closest('[data-remove]');if(!b)return;stop();state.steps.splice(Number(b.dataset.remove),1);state.time=0;renderUI();});
+els.cleanupChoice.addEventListener('click',e=>{const b=e.target.closest('[data-cleanup]');if(!b)return;state.draftCleanup=b.dataset.cleanup;els.cleanupChoice.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));els.reviewHint.textContent=state.draftCleanup==='raw'?'Exactly what you drew.':state.draftCleanup==='straight'?'Turns this movement into one perfect straight run.':'Smooth removes finger wobble.';renderDraft();});
+els.retryBtn.addEventListener('click',beginDraw);els.useBtn.addEventListener('click',useDraft);
+els.arenaSurface.addEventListener('pointerdown',e=>{
+if(!state.drawing)return;e.preventDefault();els.arenaSurface.setPointerCapture(e.pointerId);state.pointerId=e.pointerId;state.pointerStart=arenaPoint(e);state.rawDelta=[{x:0,y:0}];renderDraft();
+});
+els.arenaSurface.addEventListener('pointermove',e=>{
+if(!state.drawing||state.pointerId!==e.pointerId||!state.pointerStart)return;e.preventDefault();const p=arenaPoint(e),d={x:p.x-state.pointerStart.x,y:p.y-state.pointerStart.y};const last=state.rawDelta[state.rawDelta.length-1];if(!last||dist(last,d)>3){state.rawDelta.push(d);renderDraft();}
+});
+els.arenaSurface.addEventListener('pointerup',e=>{if(state.pointerId!==e.pointerId)return;e.preventDefault();state.pointerId=null;finishStroke();});
+els.arenaSurface.addEventListener('pointercancel',()=>cancelDraft());
+load();renderUI();
 })();
