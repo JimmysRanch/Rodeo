@@ -1,1 +1,146 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" /><meta name="theme-color" content="#11100d" /><meta name="description" content="Touch-first horseback drill routine designer." /><title>Rodeo Drill Designer</title><link rel="stylesheet" href="styles.css" /></head><body><div class="app"><header class="topbar"><div class="brand"><div class="brand-mark">R</div><div><strong>Rodeo Drill Designer</strong><span>Created by Jack Alexander</span></div></div><div class="header-help">Draw the routine. The app makes it clean and synchronized.</div><div class="header-actions"><button id="newBtn" class="small-button">New</button><button id="saveBtn" class="small-button">Save</button><button id="exportBtn" class="small-button gold-outline">Export</button></div></header><main class="workspace"><aside class="control-panel"><section class="panel-section"><div class="section-title"><b>1</b><span>Team</span></div><label class="field-label">Lines</label><div id="lineCount" class="segmented four"><button data-lines="1">1</button><button data-lines="2" class="active">2</button><button data-lines="3">3</button><button data-lines="4">4</button></div><div class="two-fields"><label><span>Horses / line</span><select id="horsesPerLine"><option>3</option><option>4</option><option>5</option><option selected>6</option><option>7</option><option>8</option><option>10</option><option>12</option></select></label><label><span>Horse gap</span><select id="horseGap"><option value="18">18 ft</option><option value="22">22 ft</option><option value="26" selected>26 ft</option><option value="30">30 ft</option><option value="34">34 ft</option></select></label></div><label class="wide-field"><span>Pace</span><select id="pace"><option value="walk">Easy</option><option value="show" selected>Show</option><option value="fast">Fast</option></select></label></section><section class="panel-section build-section"><div class="section-title"><b>2</b><span>Draw the next movement</span></div><p class="plain-help">You only draw one guide. The app handles the other lines.</p><div id="motionMode" class="segmented two motion-mode"><button data-mode="together">Move Together</button><button data-mode="mirror" class="active">Mirror</button></div><button id="drawBtn" class="draw-main"><span class="pencil">✎</span><span><strong>DRAW NEXT MOVEMENT</strong><small>Use your finger or mouse anywhere in the arena</small></span></button><div class="quick-row"><button id="holdBtn">Add 5-sec Stop</button><button id="exitBtn">Exit Right</button></div></section><section class="panel-section polish-section"><div class="section-title"><b>3</b><span>Make it professional</span></div><button id="polishBtn" class="polish-main">POLISH WHOLE ROUTINE</button><p class="plain-help">Cleans shaky curves and makes nearly-straight runs perfectly straight.</p><button id="undoBtn" class="text-button">Undo last movement</button></section></aside><section class="stage"><div class="stage-head"><div><strong id="routineName">New Routine</strong><span id="teamSummary">2 lines · 6 horses each · enters LEFT gate</span></div><div class="stage-actions"><span id="statusPill" class="status-pill">Ready to draw</span><button id="restartBtn" class="icon-button" aria-label="Restart">↺</button><button id="playBtn" class="play-button">▶ <span>PLAY</span></button></div></div><div class="arena-shell"><svg id="arena" viewBox="0 0 1000 560" aria-label="Top-down rodeo arena"><defs><pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0 L0 0 0 50" fill="none" stroke="rgba(255,255,255,.065)" stroke-width="1"/></pattern><filter id="horseShadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".34"/></filter></defs><rect x="18" y="18" width="964" height="524" rx="46" class="arena-outer"/><rect x="38" y="38" width="924" height="484" rx="35" class="arena-rail"/><rect x="52" y="52" width="896" height="456" rx="27" class="arena-dirt"/><rect x="52" y="52" width="896" height="456" rx="27" fill="url(#grid)"/><g class="arena-labels"><line x1="500" y1="52" x2="500" y2="508"/><text x="500" y="78">CENTER</text></g><g class="gate left-gate"><rect x="40" y="227" width="30" height="106" rx="7"/><text x="82" y="274">START</text><text x="82" y="293">LEFT GATE →</text></g><g class="gate right-gate"><rect x="930" y="227" width="30" height="106" rx="7"/><text x="918" y="284" text-anchor="end">EXIT</text></g><g id="routeLayer"></g><g id="startLayer"></g><g id="draftLayer"></g><g id="horseLayer"></g><rect id="arenaSurface" x="52" y="52" width="896" height="456" rx="27" fill="transparent"/></svg><div id="emptyMessage" class="empty-message"><strong>Start by drawing one movement.</strong><span>It will begin at the left gate automatically.</span></div><div id="drawMessage" class="draw-message hidden"><strong>Draw the next movement anywhere.</strong><span>Your stroke will automatically attach to the current horse position.</span></div><div id="reviewBar" class="review-bar hidden"><div class="review-title"><strong>How should this movement look?</strong><span id="reviewHint">Smooth removes finger wobble.</span></div><div id="cleanupChoice" class="cleanup-choice"><button data-cleanup="raw">Raw</button><button data-cleanup="smooth" class="active">Smooth</button><button data-cleanup="straight">Perfect Straight</button></div><button id="retryBtn" class="review-secondary">Draw Again</button><button id="useBtn" class="review-use">USE THIS</button></div></div><div class="timeline-area"><div class="timeline-top"><div><strong>Routine</strong><span id="stepCount">0 movements</span></div><div class="time-box"><span id="timeLabel">0:00</span><input id="timeline" type="range" min="0" max="1" value="0" step=".01"/><span id="durationLabel">0:00</span></div></div><div id="stepStrip" class="step-strip"><div class="empty-step">Your movements will appear here in order.</div></div></div></section></main><div id="toast" class="toast" role="status" aria-live="polite"></div></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#10100e" />
+  <meta name="description" content="Horse-first rodeo drill routine designer." />
+  <title>Rodeo Drill Designer</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">R</div>
+      <div><strong>Rodeo Drill Designer</strong><span>Created by Jack Alexander</span></div>
+    </div>
+    <div class="header-help"><strong>No lines. No forced formations.</strong> Pick exactly which horses you want, then tell only those horses what to do.</div>
+    <div class="header-actions">
+      <button id="newBtn" class="small-btn">New</button>
+      <button id="saveBtn" class="small-btn">Save</button>
+      <button id="exportBtn" class="small-btn gold">Export</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="left-panel">
+      <section class="panel team-panel">
+        <div class="step-title"><b>1</b><span>How many horses?</span></div>
+        <div class="horse-count-row">
+          <button id="horseMinus" aria-label="Remove one horse">−</button>
+          <div><strong id="horseCountLabel">12</strong><span>HORSES</span></div>
+          <button id="horsePlus" aria-label="Add one horse">+</button>
+        </div>
+        <div class="small-note">You can use <b>1 horse</b> or as many as 60.</div>
+        <button id="setStartsBtn" class="secondary-wide">Set starting spots</button>
+      </section>
+
+      <section class="panel select-panel">
+        <div class="step-title"><b>2</b><span>Which horses move?</span></div>
+        <div class="select-shortcuts">
+          <button id="selectAllBtn">All</button>
+          <button id="selectNoneBtn">None</button>
+          <button id="selectOddBtn">Odd</button>
+          <button id="selectEvenBtn">Even</button>
+        </div>
+        <div id="horseRoster" class="horse-roster" aria-label="Horse selection"></div>
+        <div id="selectionSummary" class="selection-summary">No horses selected</div>
+      </section>
+
+      <section class="panel move-panel">
+        <div class="step-title"><b>3</b><span>What do they do?</span></div>
+        <div class="timing-label">START THIS MOVEMENT</div>
+        <div id="timingMode" class="segmented">
+          <button data-timing="next" class="active">After previous</button>
+          <button data-timing="same">Same time</button>
+        </div>
+        <button id="drawBtn" class="draw-btn">
+          <span class="pencil">✎</span>
+          <span><strong>DRAW MOVE FOR SELECTED</strong><small>Draw anything: straight, loop, cross, figure 8, whatever you want.</small></span>
+        </button>
+        <button id="holdBtn" class="hold-btn">⏸ Hold selected horses for 5 sec</button>
+      </section>
+
+      <section class="panel finish-panel">
+        <button id="polishBtn" class="polish-btn">POLISH WHOLE ROUTINE</button>
+        <span>Fixes finger wobble and snaps nearly-straight runs perfectly straight.</span>
+        <button id="undoBtn" class="undo-btn">Undo last action</button>
+      </section>
+    </aside>
+
+    <section class="stage">
+      <div class="stage-head">
+        <div>
+          <strong id="routineName">New Routine</strong>
+          <span id="stageInstruction">Tap a horse in the arena or roster to select it.</span>
+        </div>
+        <div class="stage-actions">
+          <span id="statusPill" class="status-pill">Ready</span>
+          <button id="restartBtn" class="icon-btn" aria-label="Restart">↺</button>
+          <button id="playBtn" class="play-btn">▶ <span>PLAY</span></button>
+        </div>
+      </div>
+
+      <div class="arena-shell">
+        <svg id="arena" viewBox="0 0 1000 560" aria-label="Top-down rodeo arena">
+          <defs>
+            <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse"><path d="M50 0 L0 0 0 50" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="1"/></pattern>
+            <filter id="horseShadow" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".35"/></filter>
+          </defs>
+          <rect x="18" y="18" width="964" height="524" rx="46" class="arena-outer"/>
+          <rect x="38" y="38" width="924" height="484" rx="35" class="arena-rail"/>
+          <rect x="52" y="52" width="896" height="456" rx="27" class="arena-dirt"/>
+          <rect x="52" y="52" width="896" height="456" rx="27" fill="url(#grid)"/>
+          <g class="arena-marks"><line x1="500" y1="52" x2="500" y2="508"/><circle cx="500" cy="280" r="8"/><text x="500" y="77">CENTER</text></g>
+          <g class="gate left-gate"><rect x="40" y="226" width="31" height="108" rx="7"/><text x="83" y="277">LEFT GATE</text><text x="83" y="295">START →</text></g>
+          <g class="gate right-gate"><rect x="929" y="226" width="31" height="108" rx="7"/><text x="916" y="286" text-anchor="end">RIGHT GATE</text></g>
+          <g id="routeLayer"></g>
+          <g id="draftLayer"></g>
+          <g id="horseLayer"></g>
+          <rect id="arenaSurface" x="52" y="52" width="896" height="456" rx="27" fill="transparent"/>
+        </svg>
+
+        <div id="emptyHelp" class="empty-help">
+          <strong>Pick any horse or horses.</strong>
+          <span>Horse 1 can move alone. Horses 2, 5 and 9 can move together. You decide.</span>
+        </div>
+
+        <div id="drawHelp" class="draw-help hidden">
+          <strong>Draw anywhere in the arena.</strong>
+          <span>The stroke attaches to the selected horse positions automatically.</span>
+        </div>
+
+        <div id="reviewBar" class="review-bar hidden">
+          <div class="review-copy"><strong>Keep it like this?</strong><span id="reviewText">Smooth removes shaky finger movement.</span></div>
+          <div id="cleanupChoice" class="cleanup-choice">
+            <button data-cleanup="raw">Raw</button>
+            <button data-cleanup="smooth" class="active">Smooth</button>
+            <button data-cleanup="straight">Perfect Straight</button>
+          </div>
+          <button id="retryBtn" class="review-secondary">Draw Again</button>
+          <button id="useBtn" class="review-use">USE THIS MOVE</button>
+        </div>
+
+        <div id="startModeBanner" class="start-mode-banner hidden">
+          <strong>SET STARTING SPOTS</strong>
+          <span>Drag horses where you want them to begin, then press Done.</span>
+          <button id="doneStartsBtn">Done</button>
+        </div>
+      </div>
+
+      <div class="timeline-area">
+        <div class="timeline-head">
+          <div><strong>Routine Timeline</strong><span id="actionCount">0 actions</span></div>
+          <div class="scrubber"><span id="timeLabel">0:00</span><input id="timeline" type="range" min="0" max="1" step=".01" value="0"/><span id="durationLabel">0:00</span></div>
+        </div>
+        <div id="actionStrip" class="action-strip"><div class="empty-action">Actions appear here. Each card says exactly which horses move.</div></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
