@@ -62,7 +62,7 @@
         </div>
         <button id="drawBtn" class="draw-btn">
           <span class="pencil">✎</span>
-          <span><strong>DRAW NEXT MOVEMENT</strong><small>Draw one guide. The selected horses follow it together or mirrored.</small></span>
+          <span><strong>DRAW NEXT MOVEMENT</strong><small>Same Path means one exact track: each horse follows the horse in front of it.</small></span>
         </button>
       </section>
 
@@ -123,8 +123,8 @@
         </div>
 
         <div id="drawHelp" class="draw-help hidden">
-          <strong>Draw the next movement anywhere in the arena.</strong>
-          <span>The guide attaches to the selected horses automatically.</span>
+          <strong>Draw the leader's track inside the arena.</strong>
+          <span>With Same Path, every selected horse follows that exact track behind the horse in front.</span>
         </div>
 
         <div id="formationBanner" class="formation-banner hidden">
@@ -158,6 +158,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </div>
-<script src="app.js"></script>
+<script src="app-v2.js"></script>
 </body>
 </html>
